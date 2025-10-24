@@ -46,5 +46,5 @@ Imports:
 Suggests:
     testthat (>= 3.0.0)
 VignetteBuilder: knitr
-URL: https://github.com/yourusername/omniAPIr
-BugReports: https://github.com/yourusername/omniAPIr/issues
+URL: https://github.com/Risk-Team/omniAPIr
+BugReports: https://github.com/Risk-Team/omniAPIr/issues

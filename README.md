@@ -18,10 +18,8 @@
 ```r
 # Install from GitHub
 # install.packages("devtools")
-devtools::install_github("yourusername/omniAPIr")
+devtools::install_github("Risk-Team/omniAPIr")
 
-# Or install locally from source
-devtools::install()
 ```
 
 ## Python Dependencies
@@ -47,9 +45,8 @@ get_api_info()
 who_indicators <- list_un_indicators("WHO")
 ilo_unemployment <- list_un_indicators("ILO", search = "unemployment")
 
-# Discover FAOSTAT metadata
-databases <- list_faostat_metadata("databases")
-elements <- list_faostat_metadata("elements", database = "QCL")
+# Discover FAOSTAT metadata (use get_api_info for general info)
+api_info <- get_api_info("FAOSTAT")
 
 # Fetch data
 cattle_data <- get_faostat_data(
@@ -83,21 +80,14 @@ wb_indicators <- list_un_indicators("WorldBank", conda_env = "your_env_name")
 education_sdg <- list_un_indicators("UNSDG", search = "education")
 ```
 
-**For FAOSTAT**, use `list_faostat_metadata()` to discover databases, elements, and items:
+**For FAOSTAT**, use the built-in lookup tables and function documentation:
 
 ```r
-# List all available databases
-databases <- list_faostat_metadata("databases")
+# Get API information for FAOSTAT
+api_info <- get_api_info("FAOSTAT")
 
-# List elements (measurements) for Crops and Livestock database
-elements <- list_faostat_metadata("elements", database = "QCL")
-
-# List items (products) for a specific database
-items <- list_faostat_metadata("items", database = "QCL")
-
-# Find what you need and fetch data
-production_elements <- elements[grepl("production", elements$label, ignore.case = TRUE), ]
-wheat_items <- items[grepl("wheat", items$label, ignore.case = TRUE), ]
+# Use built-in lookup tables for common items
+# See ?get_faostat_data for supported items and elements
 ```
 
 ### Supported Data Sources
@@ -165,27 +155,13 @@ crop_data <- get_faostat_data(
   database = "QCL"
 )
 
-# Option 2: Use helper function to discover codes
-# Step 1: Find the database
-databases <- list_faostat_metadata("databases")
-# View(databases)  # QCL = Crops and Livestock Products
-
-# Step 2: Find the element (measurement type)
-elements <- list_faostat_metadata("elements", database = "QCL")
-prod_elements <- elements[grepl("production", elements$label, ignore.case = TRUE), ]
-# Use code 5510 for Production
-
-# Step 3: Find the item (product)
-items <- list_faostat_metadata("items", database = "QCL")
-wheat_items <- items[grepl("wheat", items$label, ignore.case = TRUE), ]
-# Use code 15 for Wheat
-
-# Step 4: Fetch the data
+# Option 2: Use exact codes (see function documentation for supported elements/items)
 wheat_production <- get_faostat_data(
-  element = "5510",
-  item = "15",
+  element = "5510",  # Production
+  item = "15",       # Wheat
   database = "QCL",
-  iso3 = "USA"
+  iso3 = "USA",
+  use_lookup = FALSE  # Use exact codes
 )
 ```
 
@@ -355,9 +331,6 @@ The package includes comprehensive tests for all API functions:
 ```r
 # Run automated tests
 devtools::test()
-
-# Run manual API tests (requires internet connection)
-source("test_all_apis_manual.R")
 ```
 
 ## Contributing
@@ -376,7 +349,7 @@ citation("omniAPIr")
 
 ## Support
 
-For issues and feature requests, please use the [GitHub issue tracker](https://github.com/yourusername/omniAPIr/issues).
+For issues and feature requests, please use the [GitHub issue tracker](https://github.com/Risk-Team/omniAPIr/issues).
 
 ## Acknowledgments
 
