@@ -1,0 +1,157 @@
+---
+title: "Getting Started with omniAPIr"
+author: "Your Name"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Getting Started with omniAPIr}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.width = 6,
+  fig.height = 4
+)
+```
+
+# Introduction
+
+`omniAPIr` provides a unified interface to multiple international data APIs. This vignette shows you how to get started with the most common use cases.
+
+## Installation and Setup
+
+```{r install, eval = FALSE}
+# Install the package
+devtools::install_github("yourusername/omniAPIr")
+
+# Load the package
+library(omniAPIr)
+```
+
+## Discovering Available APIs
+
+First, let's see what APIs are available:
+
+```{r api-info}
+# View all available APIs
+api_info <- get_api_info()
+head(api_info[, c("api_name", "function_name", "requires_auth")])
+```
+
+## Discovering Indicators and Metadata
+
+### UN Data Sources
+
+For UN data sources (WHO, ILO, UNSDG, UNDP), use `list_un_indicators()`:
+
+```{r un-indicators, eval = FALSE}
+# List WHO indicators
+who_indicators <- list_un_indicators("WHO")
+head(who_indicators)
+
+# Search for specific indicators
+unemployment_indicators <- list_un_indicators("ILO", search = "unemployment")
+```
+
+### FAOSTAT Metadata
+
+For FAO data, use `list_faostat_metadata()`:
+
+```{r faostat-metadata, eval = FALSE}
+# List available databases
+databases <- list_faostat_metadata("databases")
+head(databases)
+
+# List elements for Crops and Livestock database
+elements <- list_faostat_metadata("elements", database = "QCL")
+head(elements)
+
+# List items for Crops and Livestock database
+items <- list_faostat_metadata("items", database = "QCL")
+head(items)
+```
+
+## Fetching Data
+
+### FAOSTAT Data
+
+```{r faostat-data, eval = FALSE}
+# Get cattle population data
+cattle_data <- get_faostat_data(
+  element = "2111",  # Stocks
+  item = "cattle",
+  database = "QCL",
+  iso3 = "USA",
+  mrv = 10
+)
+
+head(cattle_data)
+```
+
+### UN Data
+
+```{r un-data, eval = FALSE}
+# Get WHO data
+who_data <- get_who_data(
+  indicator = "WHOSIS_000001",
+  mrv = 5
+)
+
+# Get ILO data
+ilo_data <- get_ilo_data(
+  iso3 = "USA",
+  indicators = "UNE_DEAP_SEX_AGE_RT_A",
+  mrv = 5
+)
+```
+
+### World Bank Data (Requires Python)
+
+```{r wb-data, eval = FALSE}
+# Requires Python conda environment
+wb_data <- get_wb_data(
+  indicators = "SP.POP.TOTL",
+  mrv = 5,
+  conda_env = "your_env_name"
+)
+```
+
+## Common Parameters
+
+All data fetching functions use consistent parameters:
+
+- `iso3`: ISO3 country code (e.g., "USA", "KEN")
+- `mrv`: Most Recent Values - number of years to retrieve
+- `verbose`: Print detailed progress messages
+- `max_retries`: Number of retry attempts for failed requests
+
+## Error Handling
+
+The package includes comprehensive error handling:
+
+```{r error-handling, eval = FALSE}
+# Invalid country code
+tryCatch({
+  get_faostat_data(
+    element = "2111",
+    item = "cattle", 
+    database = "QCL",
+    iso3 = "INVALID"
+  )
+}, error = function(e) {
+  message("Error: ", e$message)
+})
+```
+
+## Next Steps
+
+- Explore the full documentation with `?get_api_info()`
+- Check the README for complete examples
+- Run tests with `devtools::test()`
+- Report issues on GitHub
+
+For more detailed examples, see the package documentation and README file.

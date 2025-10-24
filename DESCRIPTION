@@ -1,0 +1,50 @@
+Package: omniAPIr
+Type: Package
+Title: Unified Interface to Multiple International Data APIs
+Version: 0.1.0
+Authors@R: c(
+    person(
+      "Riccardo", "Soldan",
+      email = "riccardosoldan@hotmail.it",
+      role = c("aut", "cre")
+    )
+  )
+Description: Provides a unified interface to retrieve data from multiple international
+    APIs including ACLED (conflict data), ILO (labor statistics), WHO (health indicators),
+    FAOSTAT (agriculture data), World Bank, UN SDG, UNDP HDR, FAO EMPRES-i (animal diseases),
+    IBAT (biodiversity), Giga (school connectivity), Climate Watch (NDC data), GBIF/GRIIS
+    (invasive species), OpenStreetMap, and FAO Fishstat. All functions feature consistent
+    parameter naming, automatic pagination, smart year discovery, and comprehensive error handling.
+License: GPL-3
+Encoding: UTF-8
+LazyData: true
+RoxygenNote: 7.3.1
+Depends:
+    R (>= 4.0.0)
+Imports:
+    magrittr,
+    reticulate,
+    httr,
+    httr2,
+    dplyr,
+    tibble,
+    tidyr,
+    purrr,
+    jsonlite,
+    stringr,
+    rlang,
+    countrycode,
+    sf,
+    curl,
+    utils,
+    stats,
+    readr,
+    reticulate,
+    rgbif,
+    osmdata,
+    fishstat
+Suggests:
+    testthat (>= 3.0.0)
+VignetteBuilder: knitr
+URL: https://github.com/yourusername/omniAPIr
+BugReports: https://github.com/yourusername/omniAPIr/issues
