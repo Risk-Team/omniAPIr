@@ -32,6 +32,8 @@ A data.frame with columns varying by source, but typically including:
   \itemize{
     \item code: Indicator code
     \item name/description: Indicator name or description
+    \item database: Database name (for World Bank)
+    \item database_id: Database ID (for World Bank)
     \item Additional metadata fields specific to each source
   }
 }
@@ -44,7 +46,8 @@ This helper function makes it easier to discover available indicators without
 needing to consult external documentation.
 
 **World Bank:** Requires Python with wbgapi package installed in a conda environment.
-  Specify the conda environment name using the `conda_env` parameter.
+  Fetches indicators from ALL available World Bank databases (WDI, Doing Business,
+  Debt Statistics, etc.) and includes database information in the result.
 
 **UNDP:** Requires API key (pass via `apikey` parameter or set UNDP_API_KEY
 environment variable).
@@ -57,7 +60,10 @@ who_indicators <- list_un_indicators("WHO")
 # Search for unemployment indicators in ILO
 ilo_unemployment <- list_un_indicators("ILO", search = "unemployment")
 
-# List World Bank indicators (requires conda environment)
+# List World Bank indicators from all databases (requires conda environment)
 wb_indicators <- list_un_indicators("WorldBank", conda_env = "your_env_name")
+
+# Search for GDP indicators across all databases
+gdp_indicators <- list_un_indicators("WorldBank", search = "GDP", conda_env = "your_env_name")
 }
 }

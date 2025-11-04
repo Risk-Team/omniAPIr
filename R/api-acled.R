@@ -61,6 +61,8 @@
 #'   verbose = TRUE
 #' )
 #' }
+
+
 get_acled_data <- function(
   email.address, # your ACLED login email
   password, # your ACLED password (OAuth)

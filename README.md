@@ -16,10 +16,12 @@
 ## Installation
 
 ```r
-# Install from GitHub
+# Install from GitHub (includes all optional dependencies)
 # install.packages("devtools")
 devtools::install_github("Risk-Team/omniAPIr")
 
+# For Google Earth Engine data (download_and_process_ee_image/vector)
+# Requires Python packages: pip install earthengine-api geemap
 ```
 
 ## Python Dependencies

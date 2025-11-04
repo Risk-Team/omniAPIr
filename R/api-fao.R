@@ -267,7 +267,8 @@ get_faostat_data <- function(
     while (retry_attempt <= max_retries && !success) {
       tryCatch(
         {
-          response <- httr::GET(url)
+          response <- httr2::request(url) |>
+            httr2::req_perform()
           success <- TRUE
         },
         error = function(e) {
@@ -300,8 +301,8 @@ get_faostat_data <- function(
 
     tryCatch(
       {
-        if (httr::status_code(response) == 200) {
-          content <- httr::content(response, "text", encoding = "UTF-8")
+        if (httr2::resp_status(response) == 200) {
+          content <- httr2::resp_body_string(response)
 
           if (nchar(content) > 0 && !grepl("^\\s*$", content)) {
             # Parse CSV data
@@ -372,15 +373,15 @@ get_faostat_data <- function(
           }
         } else {
           # Get error details from response
-          error_content <- httr::content(response, "text", encoding = "UTF-8")
+          error_content <- httr2::resp_body_string(response)
           if (verbose) {
-            message(sprintf("HTTP error %d", httr::status_code(response)))
+            message(sprintf("HTTP error %d", httr2::resp_status(response)))
             message(sprintf("Error: %s", error_content))
           }
 
           message(sprintf(
             "HTTP error %d from FAOSTAT API. Response: %s",
-            httr::status_code(response),
+            httr2::resp_status(response),
             error_content
           ))
           return(data.frame())
@@ -576,12 +577,13 @@ get_fao_fra_data <- function(
   while (retry_attempt <= max_retries && !success) {
     tryCatch(
       {
-        response <- httr::GET(query)
+        response <- httr2::request(query) |>
+          httr2::req_perform()
 
-        if (httr::status_code(response) == 200) {
+        if (httr2::resp_status(response) == 200) {
           success <- TRUE
         } else {
-          stop(sprintf("HTTP error %d", httr::status_code(response)))
+          stop(sprintf("HTTP error %d", httr2::resp_status(response)))
         }
       },
       error = function(e) {
@@ -612,7 +614,7 @@ get_fao_fra_data <- function(
     )
   }
 
-  result <- jsonlite::fromJSON(rawToChar(response$content))
+  result <- jsonlite::fromJSON(httr2::resp_body_string(response))
 
   message(sprintf("✓ FAO FRA data retrieved successfully"))
 
@@ -1157,12 +1159,13 @@ get_empres_data <- function(
   while (retry_attempt <= max_retries && !success) {
     tryCatch(
       {
-        response <- httr::GET(url)
+        response <- httr2::request(url) |>
+          httr2::req_perform()
 
-        if (httr::status_code(response) == 200) {
+        if (httr2::resp_status(response) == 200) {
           success <- TRUE
         } else {
-          stop(sprintf("HTTP error %d", httr::status_code(response)))
+          stop(sprintf("HTTP error %d", httr2::resp_status(response)))
         }
       },
       error = function(e) {
@@ -1196,11 +1199,7 @@ get_empres_data <- function(
   # Parse JSON response
   tryCatch(
     {
-      data <- jsonlite::fromJSON(httr::content(
-        response,
-        "text",
-        encoding = "UTF-8"
-      ))
+      data <- jsonlite::fromJSON(httr2::resp_body_string(response))
 
       # Check if data is empty or NULL
       if (

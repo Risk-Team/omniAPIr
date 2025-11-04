@@ -51,15 +51,15 @@ ilo_data <- get_ilo_data(
 \seealso{
 Useful links:
 \itemize{
-  \item \url{https://github.com/yourusername/omniAPIr}
-  \item Report bugs at \url{https://github.com/yourusername/omniAPIr/issues}
+  \item \url{https://github.com/Risk-Team/omniAPIr}
+  \item Report bugs at \url{https://github.com/Risk-Team/omniAPIr/issues}
 }
 
 
 Useful links:
 \itemize{
-  \item \url{https://github.com/yourusername/omniAPIr}
-  \item Report bugs at \url{https://github.com/yourusername/omniAPIr/issues}
+  \item \url{https://github.com/Risk-Team/omniAPIr}
+  \item Report bugs at \url{https://github.com/Risk-Team/omniAPIr/issues}
 }
 
 }

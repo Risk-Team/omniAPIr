@@ -48,7 +48,10 @@ get_api_info <- function(api_name = NULL) {
       "get_ndc_data",
       "get_invasive_alien_species",
       "get_osm_features",
-      "get_fishstat_data"
+      "get_fishstat_data",
+      "download_and_process_ee_image",
+      "download_and_process_ee_vector",
+      "get_fishwatch_data"
     ),
     api_name = c(
       "ACLED",
@@ -65,7 +68,10 @@ get_api_info <- function(api_name = NULL) {
       "Climate Watch NDC",
       "GBIF/GRIIS",
       "OpenStreetMap",
-      "FAO Fishstat"
+      "FAO Fishstat",
+      "Google Earth Engine",
+      "Google Earth Engine",
+      "Global Fishing Watch"
     ),
     base_url = c(
       "https://acleddata.com/api/acled/read",
@@ -82,6 +88,9 @@ get_api_info <- function(api_name = NULL) {
       "https://www.climatewatchdata.org/api/v1/data/ndc_content",
       "https://api.gbif.org/v1/",
       "https://overpass-api.de/api/interpreter",
+      "N/A (R package data)",
+      "https://earthengine.google.com/",
+      "https://earthengine.google.com/",
       "N/A (R package data)"
     ),
     api_docs_url = c(
@@ -99,7 +108,10 @@ get_api_info <- function(api_name = NULL) {
       "https://www.climatewatchdata.org/about/ndc",
       "https://www.gbif.org/developer/summary",
       "https://wiki.openstreetmap.org/wiki/API",
-      "https://github.com/socialcopsdev/fishstat"
+      "https://github.com/socialcopsdev/fishstat",
+      "https://developers.google.com/earth-engine",
+      "https://developers.google.com/earth-engine",
+      "https://github.com/GlobalFishingWatch/gfwr/"
     ),
     requires_python = c(
       FALSE,
@@ -116,6 +128,9 @@ get_api_info <- function(api_name = NULL) {
       FALSE,
       FALSE,
       FALSE,
+      FALSE,
+      TRUE, # Google Earth Engine requires Python packages
+      TRUE, # Google Earth Engine requires Python packages
       FALSE
     ),
     python_packages = c(
@@ -133,6 +148,9 @@ get_api_info <- function(api_name = NULL) {
       NA,
       NA,
       NA,
+      NA,
+      "ee, geemap",
+      "ee, geemap",
       NA
     ),
     r_packages = c(
@@ -150,7 +168,10 @@ get_api_info <- function(api_name = NULL) {
       NA,
       "rgbif",
       "osmdata",
-      "fishstat"
+      "fishstat",
+      NA,
+      NA,
+      "gfwr"
     ),
     requires_auth = c(
       TRUE, # ACLED requires email/password
@@ -167,7 +188,10 @@ get_api_info <- function(api_name = NULL) {
       FALSE,
       FALSE,
       FALSE,
-      FALSE
+      FALSE,
+      TRUE, # Google Earth Engine requires authentication
+      TRUE, # Google Earth Engine requires authentication
+      TRUE # Global Fishing Watch requires API key
     ),
     description = c(
       "Armed Conflict Location & Event Data Project - conflict events database",
@@ -184,7 +208,10 @@ get_api_info <- function(api_name = NULL) {
       "Climate Watch - Nationally Determined Contributions data",
       "Global Register of Introduced and Invasive Species via GBIF",
       "OpenStreetMap - crowdsourced geographic features",
-      "FAO Fisheries Statistics - fishery production data"
+      "FAO Fisheries Statistics - fishery production data",
+      "Google Earth Engine - satellite imagery and raster data processing",
+      "Google Earth Engine - vector data and feature collection processing",
+      "Global Fishing Watch - apparent fishing effort and vessel tracking data"
     ),
     stringsAsFactors = FALSE
   )

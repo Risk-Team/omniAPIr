@@ -179,8 +179,9 @@ list_un_indicators <- function(
   while (retry_attempt <= max_retries && !success) {
     tryCatch(
       {
-        resp <- httr::GET(base_url)
-        httr::stop_for_status(resp)
+        resp <- httr2::request(base_url) |>
+          httr2::req_perform()
+        httr2::resp_check_status(resp)
         success <- TRUE
       },
       error = function(e) {
@@ -211,7 +212,7 @@ list_un_indicators <- function(
     )
   }
 
-  content <- httr::content(resp, "text", encoding = "UTF-8")
+  content <- httr2::resp_body_string(resp)
   json <- jsonlite::fromJSON(content, flatten = TRUE)
 
   result <- tibble::as_tibble(json) %>%
@@ -249,8 +250,10 @@ list_un_indicators <- function(
   while (retry_attempt <= max_retries && !success) {
     tryCatch(
       {
-        resp <- httr::GET(base_url, query = list(apikey = apikey))
-        httr::stop_for_status(resp)
+        resp <- httr2::request(base_url) |>
+          httr2::req_url_query(apikey = apikey) |>
+          httr2::req_perform()
+        httr2::resp_check_status(resp)
         success <- TRUE
       },
       error = function(e) {
@@ -281,7 +284,7 @@ list_un_indicators <- function(
     )
   }
 
-  content <- httr::content(resp, "text", encoding = "UTF-8")
+  content <- httr2::resp_body_string(resp)
   json <- jsonlite::fromJSON(content, flatten = TRUE)
 
   # Extract unique indicators
@@ -312,12 +315,11 @@ list_un_indicators <- function(
   while (retry_attempt <= max_retries && !success) {
     tryCatch(
       {
-        response <- httr::GET(
-          base_url,
-          query = list(lang = "en", format = ".csv"),
-          httr::user_agent("fetch_ilo_indicators/1.0")
-        )
-        httr::stop_for_status(response)
+        response <- httr2::request(base_url) |>
+          httr2::req_url_query(lang = "en", format = ".csv") |>
+          httr2::req_user_agent("fetch_ilo_indicators/1.0") |>
+          httr2::req_perform()
+        httr2::resp_check_status(response)
         success <- TRUE
       },
       error = function(e) {
@@ -349,7 +351,7 @@ list_un_indicators <- function(
   }
 
   # Parse CSV from octet-stream (or gzipped) as raw bytes
-  raw_content <- httr::content(response, as = "raw")
+  raw_content <- httr2::resp_body_raw(response)
 
   # Quick guard: bail if we actually got HTML
   if (
@@ -416,8 +418,9 @@ list_un_indicators <- function(
   while (retry_attempt <= max_retries && !success) {
     tryCatch(
       {
-        response <- httr::GET(base_url)
-        httr::stop_for_status(response)
+        response <- httr2::request(base_url) |>
+          httr2::req_perform()
+        httr2::resp_check_status(response)
         success <- TRUE
       },
       error = function(e) {
@@ -448,7 +451,7 @@ list_un_indicators <- function(
     )
   }
 
-  json <- httr::content(response, "parsed")
+  json <- httr2::resp_body_json(response)
 
   # Extract indicator codes and names
   result <- tibble::tibble(
@@ -481,8 +484,12 @@ list_un_indicators <- function(
 #' @param mrv Integer. Most Recent Values - number of years to retrieve. Default is 23.
 #' @param verbose Logical. If TRUE, prints detailed progress messages. Default is FALSE.
 #' @param conda_env Character. Conda environment name containing wbgapi package (required).
+#' @param exclude_aggregates Logical. If TRUE (default), filters out regional and income group aggregates,
+#'   returning only data for individual countries with valid ISO3 codes.
+#' @param max_retries Integer. Maximum number of retry attempts for failed requests. Default is 3.
 #'
 #' @return A data.frame with columns: isocode, Year, value, indicator.
+#'   By default, only includes individual countries (aggregates excluded).
 #'
 #' @details
 #' API Documentation: \url{https://github.com/tgherzog/wbgapi}
@@ -491,15 +498,34 @@ list_un_indicators <- function(
 #' installed in a conda environment. Specify the conda environment name using
 #' the `conda_env` parameter.
 #'
+#' **Aggregate Filtering:** By default, the function excludes regional and income group
+#' aggregates (e.g., "World", "Sub-Saharan Africa", "High income") to return only
+#' individual country data. Set `exclude_aggregates = FALSE` to include all entities.
+#'
 #' @export
 #'
 #' @examples
 #' \dontrun{
-#' # Get GDP data
+#' # Get GDP data for a specific country (excludes aggregates by default)
 #' wb_data <- get_wb_data(
 #'   indicators = "NY.GDP.MKTP.CD",
 #'   iso3 = "KEN",
 #'   mrv = 10,
+#'   conda_env = "your_env_name"
+#' )
+#'
+#' # Get multiple indicators for all countries
+#' wb_data <- get_wb_data(
+#'   indicators = c("NY.GDP.MKTP.CD", "SP.POP.TOTL"),
+#'   mrv = 5,
+#'   conda_env = "your_env_name"
+#' )
+#'
+#' # Include regional aggregates in the results
+#' wb_data_with_aggregates <- get_wb_data(
+#'   indicators = "NY.GDP.MKTP.CD",
+#'   mrv = 10,
+#'   exclude_aggregates = FALSE,
 #'   conda_env = "your_env_name"
 #' )
 #' }
@@ -508,7 +534,9 @@ get_wb_data <- function(
   iso3 = NULL,
   mrv = 23,
   verbose = FALSE,
-  conda_env
+  conda_env,
+  exclude_aggregates = TRUE,
+  max_retries = 3
 ) {
   # Validate conda_env parameter
   if (missing(conda_env)) {
@@ -527,17 +555,56 @@ get_wb_data <- function(
 
   # Process each indicator separately to maintain clear structure
   indicator_data <- purrr::map_dfr(indicators, function(indicator) {
-    if (!is.null(iso3)) {
-      raw_data <- wb$data$DataFrame(
-        indicator,
-        iso3,
-        mrv = mrv,
-        labels = TRUE
-      ) %>%
-        tibble::rownames_to_column(var = "isocode")
-    } else {
-      raw_data <- wb$data$DataFrame(indicator, mrv = mrv, labels = TRUE) %>%
-        tibble::rownames_to_column(var = "isocode")
+    # Retry logic for each indicator
+    retry_attempt <- 1
+    success <- FALSE
+    raw_data <- NULL
+
+    while (retry_attempt <= max_retries && !success) {
+      tryCatch(
+        {
+          if (!is.null(iso3)) {
+            raw_data <- wb$data$DataFrame(
+              indicator,
+              iso3,
+              mrv = mrv,
+              labels = TRUE
+            ) %>%
+              tibble::rownames_to_column(var = "isocode")
+          } else {
+            raw_data <- wb$data$DataFrame(indicator, mrv = mrv, labels = TRUE) %>%
+              tibble::rownames_to_column(var = "isocode")
+          }
+          success <- TRUE
+        },
+        error = function(e) {
+          if (retry_attempt < max_retries) {
+            wait_time <- 2^retry_attempt
+            if (verbose) {
+              message(sprintf(
+                "Request failed for indicator %s (attempt %d/%d): %s. Retrying in %d seconds...",
+                indicator,
+                retry_attempt,
+                max_retries,
+                conditionMessage(e),
+                wait_time
+              ))
+            }
+            Sys.sleep(wait_time)
+            retry_attempt <<- retry_attempt + 1
+          } else {
+            stop(
+              sprintf(
+                "Failed to fetch World Bank data for indicator %s after %d attempts: %s",
+                indicator,
+                max_retries,
+                conditionMessage(e)
+              ),
+              call. = FALSE
+            )
+          }
+        }
+      )
     }
 
     # Only pivot columns that start with "YR" (year columns)
@@ -565,6 +632,32 @@ get_wb_data <- function(
     }
   })
 
+  # Filter out aggregates by validating ISO codes (if requested)
+  if (exclude_aggregates) {
+    initial_rows <- nrow(indicator_data)
+
+    indicator_data <- indicator_data %>%
+      dplyr::mutate(
+        is_valid_country = !is.na(countrycode::countrycode(
+          isocode,
+          origin = "iso3c",
+          destination = "country.name",
+          warn = FALSE
+        ))
+      ) %>%
+      dplyr::filter(is_valid_country) %>%
+      dplyr::select(-is_valid_country)
+
+    filtered_rows <- initial_rows - nrow(indicator_data)
+
+    if (verbose && filtered_rows > 0) {
+      message(sprintf(
+        "  Excluded %s aggregate rows",
+        format(filtered_rows, big.mark = ",")
+      ))
+    }
+  }
+
   message(sprintf(
     "✓ World Bank data retrieved successfully: %s rows",
     format(nrow(indicator_data), big.mark = ",")
@@ -586,9 +679,12 @@ get_wb_data <- function(
 #' @param verbose Logical. If TRUE, prints detailed progress messages. Default is FALSE.
 #' @param max_retries Integer. Maximum number of retry attempts for failed requests.
 #'   Default is 3.
+#' @param exclude_aggregates Logical. If TRUE (default), filters out regional and income group aggregates,
+#'   returning only data for individual countries with valid ISO3 codes.
 #'
 #' @return A data.frame with columns: indicator, series, seriesDescription, iso3,
 #'   area, year, value, unit, source.
+#'   By default, only includes individual countries (aggregates excluded).
 #'
 #' @details
 #' API Documentation: \url{https://unstats.un.org/SDGAPI/swagger/}
@@ -597,15 +693,26 @@ get_wb_data <- function(
 #' required by the API, retrieves data for the specified time period, and returns
 #' the most recent values.
 #'
+#' **Aggregate Filtering:** By default, the function excludes regional and income group
+#' aggregates (e.g., "World", "Sub-Saharan Africa") to return only individual country data.
+#' Set `exclude_aggregates = FALSE` to include all entities.
+#'
 #' @export
 #'
 #' @examples
 #' \dontrun{
-#' # Get SDG data for poverty indicators
+#' # Get SDG data for poverty indicators (excludes aggregates by default)
 #' sdg_data <- get_unsdg_data(
 #'   indicators = c("1.1.1", "1.2.1"),
 #'   iso3 = "KEN",
 #'   mrv = 10
+#' )
+#'
+#' # Get data for all countries and regions
+#' sdg_data_all <- get_unsdg_data(
+#'   indicators = "1.1.1",
+#'   mrv = 5,
+#'   exclude_aggregates = FALSE
 #' )
 #' }
 
@@ -614,7 +721,8 @@ get_unsdg_data <- function(
   iso3 = NULL,
   mrv = 23,
   verbose = FALSE,
-  max_retries = 3
+  max_retries = 3,
+  exclude_aggregates = TRUE
 ) {
   if (verbose) {
     message(sprintf(
@@ -680,11 +788,13 @@ get_unsdg_data <- function(
     while (retry_attempt <= max_retries && !success) {
       tryCatch(
         {
-          resp <- httr::GET(base, query = q)
-          if (!httr::http_error(resp)) {
+          resp <- httr2::request(base) |>
+            httr2::req_url_query(!!!q) |>
+            httr2::req_perform()
+          if (!httr2::resp_is_error(resp)) {
             success <- TRUE
           } else {
-            stop(sprintf("HTTP error %d", httr::status_code(resp)))
+            stop(sprintf("HTTP error %d", httr2::resp_status(resp)))
           }
         },
         error = function(e) {
@@ -719,7 +829,7 @@ get_unsdg_data <- function(
     }
 
     # Parse response according to Swagger schema
-    response_content <- httr::content(resp, as = "text", encoding = "UTF-8")
+    response_content <- httr2::resp_body_string(resp)
     parsed_response <- jsonlite::fromJSON(response_content, flatten = TRUE)
 
     # Extract data array from response
@@ -768,6 +878,32 @@ get_unsdg_data <- function(
     dplyr::ungroup() %>%
     dplyr::arrange(indicator, iso3, year)
 
+  # Filter out aggregates by validating ISO codes (if requested)
+  if (exclude_aggregates) {
+    initial_rows <- nrow(final_results)
+
+    final_results <- final_results %>%
+      dplyr::mutate(
+        is_valid_country = !is.na(countrycode::countrycode(
+          iso3,
+          origin = "iso3c",
+          destination = "country.name",
+          warn = FALSE
+        ))
+      ) %>%
+      dplyr::filter(is_valid_country) %>%
+      dplyr::select(-is_valid_country)
+
+    filtered_rows <- initial_rows - nrow(final_results)
+
+    if (verbose && filtered_rows > 0) {
+      message(sprintf(
+        "  Excluded %s aggregate rows",
+        format(filtered_rows, big.mark = ",")
+      ))
+    }
+  }
+
   message(sprintf(
     "✓ UNSDG data retrieved successfully: %s rows",
     format(nrow(final_results), big.mark = ",")
@@ -792,8 +928,11 @@ get_unsdg_data <- function(
 #' @param verbose Logical. If TRUE, prints detailed progress messages. Default is FALSE.
 #' @param max_retries Integer. Maximum number of retry attempts for failed requests.
 #'   Default is 3.
+#' @param exclude_aggregates Logical. If TRUE (default), filters out regional and income group aggregates,
+#'   returning only data for individual countries with valid ISO3 codes.
 #'
 #' @return A tibble containing UNDP data with year, country, and indicator values.
+#'   By default, only includes individual countries (aggregates excluded).
 #'
 #' @details
 #' API Documentation: \url{https://hdr.undp.org/data-center/documentation-and-downloads}
@@ -802,16 +941,28 @@ get_unsdg_data <- function(
 #'
 #' The function implements smart year discovery similar to other get_* functions.
 #'
+#' **Aggregate Filtering:** By default, the function excludes regional and income group
+#' aggregates to return only individual country data. Set `exclude_aggregates = FALSE`
+#' to include all entities.
+#'
 #' @export
 #'
 #' @examples
 #' \dontrun{
-#' # Get HDI data
+#' # Get HDI data for a specific country (excludes aggregates by default)
 #' hdi_data <- get_undp_data(
 #'   indicator = "hdi",
 #'   apikey = "your_api_key",
 #'   iso3 = "KEN",
 #'   mrv = 10
+#' )
+#'
+#' # Include regional aggregates in the results
+#' hdi_data_all <- get_undp_data(
+#'   indicator = "hdi",
+#'   apikey = "your_api_key",
+#'   mrv = 10,
+#'   exclude_aggregates = FALSE
 #' )
 #' }
 
@@ -822,17 +973,20 @@ get_undp_data <- function(
   metadata = FALSE,
   mrv = 23,
   verbose = FALSE,
-  max_retries = 3
+  max_retries = 3,
+  exclude_aggregates = TRUE
 ) {
   # Always use the detailed endpoint
   base_url <- "https://hdrdata.org/api/CompositeIndices/query-detailed"
 
   if (metadata) {
-    resp <- httr::GET(base_url, query = list(apikey = apikey))
-    httr::stop_for_status(resp)
+    resp <- httr2::request(base_url) |>
+      httr2::req_url_query(apikey = apikey) |>
+      httr2::req_perform()
+    httr2::resp_check_status(resp)
     return(
       jsonlite::fromJSON(
-        httr::content(resp, as = "text", encoding = "UTF-8"),
+        httr2::resp_body_string(resp),
         flatten = TRUE
       ) |>
         tibble::as_tibble()
@@ -868,8 +1022,10 @@ get_undp_data <- function(
     while (retry_attempt <= max_retries && !success) {
       tryCatch(
         {
-          resp <- httr::GET(base_url, query = q)
-          httr::stop_for_status(resp)
+          resp <- httr2::request(base_url) |>
+            httr2::req_url_query(!!!q) |>
+            httr2::req_perform()
+          httr2::resp_check_status(resp)
           success <- TRUE
         },
         error = function(e) {
@@ -900,7 +1056,7 @@ get_undp_data <- function(
       )
     }
 
-    txt <- httr::content(resp, as = "text", encoding = "UTF-8")
+    txt <- httr2::resp_body_string(resp)
     json <- jsonlite::fromJSON(txt, flatten = TRUE)
     # Extract data frame from JSON
     df <- if (is.data.frame(json)) {
@@ -985,6 +1141,54 @@ get_undp_data <- function(
     }
   }
 
+  # Filter out aggregates by validating ISO codes (if requested)
+  if (exclude_aggregates && nrow(result) > 0) {
+    # Try to find the ISO3 column (might be named differently)
+    iso_col <- NULL
+    possible_names <- c(
+      "iso3",
+      "iso_code",
+      "isocode",
+      "country_code",
+      "countryCode",
+      "country"
+    )
+
+    for (col_name in possible_names) {
+      if (col_name %in% names(result)) {
+        iso_col <- col_name
+        break
+      }
+    }
+
+    if (!is.null(iso_col)) {
+      initial_rows <- nrow(result)
+
+      result <- result %>%
+        dplyr::mutate(
+          is_valid_country = !is.na(countrycode::countrycode(
+            !!rlang::sym(iso_col),
+            origin = "iso3c",
+            destination = "country.name",
+            warn = FALSE
+          ))
+        ) %>%
+        dplyr::filter(is_valid_country) %>%
+        dplyr::select(-is_valid_country)
+
+      filtered_rows <- initial_rows - nrow(result)
+
+      if (verbose && filtered_rows > 0) {
+        message(sprintf(
+          "  Excluded %s aggregate rows",
+          format(filtered_rows, big.mark = ",")
+        ))
+      }
+    } else if (verbose) {
+      message("  Could not identify ISO3 column for aggregate filtering")
+    }
+  }
+
   message(sprintf(
     "✓ UNDP data retrieved successfully: %s rows",
     format(nrow(result), big.mark = ",")
@@ -1009,9 +1213,12 @@ get_undp_data <- function(
 #' @param verbose Logical. If TRUE, prints detailed progress messages. Default is FALSE.
 #' @param max_retries Integer. Maximum number of retry attempts for failed requests.
 #'   Default is 3.
+#' @param exclude_aggregates Logical. If TRUE (default), filters out regional and income group aggregates,
+#'   returning only data for individual countries with valid ISO3 codes.
 #'
 #' @return A data.frame with columns: isocode, Year, Value, and additional
 #'   indicator-specific columns from the ILO API.
+#'   By default, only includes individual countries (aggregates excluded).
 #'
 #' @details
 #' API Documentation: \url{https://rplumber.ilo.org/__docs__/}
@@ -1021,15 +1228,26 @@ get_undp_data <- function(
 #' back to 1960) until data is found, then returns the most recent values up
 #' to the mrv limit.
 #'
+#' **Aggregate Filtering:** By default, the function excludes regional and income group
+#' aggregates to return only individual country data. Set `exclude_aggregates = FALSE`
+#' to include all entities.
+#'
 #' @export
 #'
 #' @examples
 #' \dontrun{
-#' # Get unemployment rate for Kenya
+#' # Get unemployment rate for Kenya (excludes aggregates by default)
 #' ilo_data <- get_ilo_data(
 #'   iso3 = "KEN",
 #'   indicators = "UNE_DEAP_SEX_AGE_RT_A",
 #'   mrv = 10
+#' )
+#'
+#' # Get data for all countries and regions
+#' ilo_data_all <- get_ilo_data(
+#'   indicators = "UNE_DEAP_SEX_AGE_RT_A",
+#'   mrv = 10,
+#'   exclude_aggregates = FALSE
 #' )
 #' }
 get_ilo_data <- function(
@@ -1037,7 +1255,8 @@ get_ilo_data <- function(
   indicators,
   mrv = 23,
   verbose = FALSE,
-  max_retries = 3
+  max_retries = 3,
+  exclude_aggregates = TRUE
 ) {
   # Validate inputs
   if (missing(indicators) || length(indicators) == 0) {
@@ -1082,13 +1301,10 @@ get_ilo_data <- function(
             while (retry_attempt <= max_retries && !success) {
               tryCatch(
                 {
-                  response <- httr::GET(url)
-                  if (httr::status_code(response) == 200) {
-                    content <- httr::content(
-                      response,
-                      "text",
-                      encoding = "UTF-8"
-                    )
+                  response <- httr2::request(url) |>
+                    httr2::req_perform()
+                  if (httr2::resp_status(response) == 200) {
+                    content <- httr2::resp_body_string(response)
                     if (nchar(content) > 0 && !grepl("^\\s*$", content)) {
                       success <- TRUE
                       return(utils::read.csv(textConnection(content)))
@@ -1104,7 +1320,7 @@ get_ilo_data <- function(
                       if (verbose) {
                         message(sprintf(
                           "HTTP %d for indicator %s (attempt %d/%d). Retrying in %d seconds...",
-                          httr::status_code(response),
+                          httr2::resp_status(response),
                           .x,
                           retry_attempt,
                           max_retries,
@@ -1117,7 +1333,7 @@ get_ilo_data <- function(
                       if (verbose) {
                         message(sprintf(
                           "HTTP error %d for indicator: %s after %d attempts",
-                          httr::status_code(response),
+                          httr2::resp_status(response),
                           .x,
                           max_retries
                         ))
@@ -1256,6 +1472,32 @@ get_ilo_data <- function(
     }
   }
 
+  # Filter out aggregates by validating ISO codes (if requested)
+  if (exclude_aggregates && nrow(result) > 0 && "isocode" %in% names(result)) {
+    initial_rows <- nrow(result)
+
+    result <- result %>%
+      dplyr::mutate(
+        is_valid_country = !is.na(countrycode::countrycode(
+          isocode,
+          origin = "iso3c",
+          destination = "country.name",
+          warn = FALSE
+        ))
+      ) %>%
+      dplyr::filter(is_valid_country) %>%
+      dplyr::select(-is_valid_country)
+
+    filtered_rows <- initial_rows - nrow(result)
+
+    if (verbose && filtered_rows > 0) {
+      message(sprintf(
+        "  Excluded %s aggregate rows",
+        format(filtered_rows, big.mark = ",")
+      ))
+    }
+  }
+
   message(sprintf(
     "✓ ILO data retrieved successfully: %s rows",
     format(nrow(result), big.mark = ",")
@@ -1277,9 +1519,12 @@ get_ilo_data <- function(
 #' @param verbose Logical. If TRUE, prints detailed progress messages. Default is FALSE.
 #' @param max_retries Integer. Maximum number of retry attempts for failed requests.
 #'   Default is 3.
+#' @param exclude_aggregates Logical. If TRUE (default), filters out regional and income group aggregates,
+#'   returning only data for individual countries with valid ISO3 codes.
 #'
 #' @return A data.frame with columns: isocode, Year, Value, indicator, and all
 #'   available fields from the WHO API response.
+#'   By default, only includes individual countries (aggregates excluded).
 #'
 #' @details
 #' API Documentation: \url{https://www.who.int/data/gho/info/gho-odata-api}
@@ -1288,15 +1533,26 @@ get_ilo_data <- function(
 #' standardized columns (isocode, Year, Value). Implements smart year discovery
 #' similar to get_ilo_data().
 #'
+#' **Aggregate Filtering:** By default, the function excludes regional and income group
+#' aggregates to return only individual country data. Set `exclude_aggregates = FALSE`
+#' to include all entities.
+#'
 #' @export
 #'
 #' @examples
 #' \dontrun{
-#' # Get life expectancy data
+#' # Get life expectancy data for a specific country (excludes aggregates by default)
 #' who_data <- get_who_data(
 #'   iso3 = "KEN",
 #'   indicators = "WHOSIS_000001",
 #'   mrv = 10
+#' )
+#'
+#' # Get data for all countries and regions
+#' who_data_all <- get_who_data(
+#'   indicators = "WHOSIS_000001",
+#'   mrv = 10,
+#'   exclude_aggregates = FALSE
 #' )
 #' }
 get_who_data <- function(
@@ -1304,7 +1560,8 @@ get_who_data <- function(
   indicators,
   mrv = 23,
   verbose = FALSE,
-  max_retries = 3
+  max_retries = 3,
+  exclude_aggregates = TRUE
 ) {
   # Validate inputs
   if (missing(indicators) || length(indicators) == 0) {
@@ -1352,7 +1609,9 @@ get_who_data <- function(
             while (retry_attempt <= max_retries && !success) {
               tryCatch(
                 {
-                  result <- httr::GET(url) %>% httr::content("parsed")
+                  result <- httr2::request(url) |>
+                    httr2::req_perform() |>
+                    httr2::resp_body_json()
                   success <- TRUE
                 },
                 error = function(e) {
@@ -1485,6 +1744,32 @@ get_who_data <- function(
     if (nrow(result) == 0) {
       message("No data found even with expanded year range")
       return(result)
+    }
+  }
+
+  # Filter out aggregates by validating ISO codes (if requested)
+  if (exclude_aggregates && nrow(result) > 0 && "isocode" %in% names(result)) {
+    initial_rows <- nrow(result)
+
+    result <- result %>%
+      dplyr::mutate(
+        is_valid_country = !is.na(countrycode::countrycode(
+          isocode,
+          origin = "iso3c",
+          destination = "country.name",
+          warn = FALSE
+        ))
+      ) %>%
+      dplyr::filter(is_valid_country) %>%
+      dplyr::select(-is_valid_country)
+
+    filtered_rows <- initial_rows - nrow(result)
+
+    if (verbose && filtered_rows > 0) {
+      message(sprintf(
+        "  Excluded %s aggregate rows",
+        format(filtered_rows, big.mark = ",")
+      ))
     }
   }
 

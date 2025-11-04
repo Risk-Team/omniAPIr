@@ -613,3 +613,151 @@ get_ndc_data <- function(
 
   list(raw = raw, critical = critical, summary = summary, by_sector = by_sector)
 }
+
+#' Get Global Fishing Watch Data
+#'
+#' @description
+#' Retrieves apparent fishing effort data from Global Fishing Watch API using
+#' the gfwr package. Supports various spatial and temporal resolutions with
+#' flexible region definitions.
+#'
+#' @param spatial_resolution Character. Raster spatial resolution. Can be "LOW" (0.1 degree)
+#'   or "HIGH" (0.01 degree). Default is "LOW".
+#' @param temporal_resolution Character. Raster temporal resolution. Can be "HOURLY",
+#'   "DAILY", "MONTHLY", "YEARLY". Default is "MONTHLY".
+#' @param start_date Character. Start of date range in YYYY-MM-DD format. Default is "2023-01-01".
+#' @param end_date Character. End of date range in YYYY-MM-DD format. Default is "2023-12-31".
+#' @param region_source Character. Source of the region: "EEZ", "MPA", "RFMO" or "USER_SHAPEFILE".
+#' @param region Character, numeric, or sf object. If region_source is "EEZ", "MPA" or "RFMO",
+#'   GFW region ID (e.g., 5682 for Italian EEZ). If region_source = "USER_SHAPEFILE",
+#'   sf shapefile with area of interest.
+#' @param group_by Character. Parameter to group by. Can be "VESSEL_ID", "FLAG",
+#'   "GEARTYPE", "FLAGANDGEARTYPE" or "MMSI". Optional.
+#' @param filter_by Character. Fields to filter AIS-based apparent fishing effort.
+#'   SQL expressions like filter_by = "flag IN ('ESP')". Optional.
+#' @param api_key Character. Global Fishing Watch API token (required).
+#' @param verbose Logical. If TRUE, prints detailed progress messages. Default is TRUE.
+#' @param max_retries Integer. Maximum number of retry attempts for failed requests.
+#'   Default is 3.
+#'
+#' @return A tibble containing fishing effort data with spatial and temporal information.
+#'
+#' @details
+#' This function provides access to Global Fishing Watch's apparent fishing effort data
+#' through their API. It requires authentication with a valid API key.
+#'
+#' **Authentication Required:** Obtain an API key from Global Fishing Watch.
+#'
+#' **Date Range Limitation:** Start and end dates should be apart 366 days or less.
+#'
+#' **Region Sources:**
+#' - EEZ: Exclusive Economic Zone
+#' - MPA: Marine Protected Area
+#' - RFMO: Regional Fisheries Management Organization
+#' - USER_SHAPEFILE: Custom sf polygon object
+#'
+#' @importFrom magrittr %>%
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#' # Get fishing effort for Spain EEZ
+#' fishing_data <- get_fishwatch_data(
+#'   spatial_resolution = "LOW",
+#'   temporal_resolution = "MONTHLY",
+#'   start_date = "2023-01-01",
+#'   end_date = "2023-12-31",
+#'   region_source = "EEZ",
+#'   region = 5682,  # Italian EEZ ID (use get_region_id("ITA", "EEZ") to find)
+#'   group_by = "FLAG",
+#'   api_key = "your_api_key"
+#' )
+#'
+#' # Get fishing effort for a custom region
+#' library(sf)
+#' custom_region <- st_read("my_area.shp")
+#' fishing_data <- get_fishwatch_data(
+#'   spatial_resolution = "HIGH",
+#'   temporal_resolution = "DAILY",
+#'   start_date = "2023-06-01",
+#'   end_date = "2023-06-30",
+#'   region_source = "USER_SHAPEFILE",
+#'   region = custom_region,
+#'   api_key = "your_api_key"
+#' )
+#' }
+get_fishwatch_data <- function(
+  spatial_resolution = "LOW",
+  temporal_resolution = "MONTHLY",
+  start_date = "2023-01-01",
+  end_date = "2023-12-31",
+  region_source = NULL,
+  region = NULL,
+  group_by = NULL,
+  filter_by = NULL,
+  api_key = NULL,
+  verbose = TRUE,
+  max_retries = 3
+) {
+  # Validate required parameters
+  if (is.null(api_key)) {
+    stop("api_key parameter is required for Global Fishing Watch API")
+  }
+
+  if (is.null(region_source)) {
+    stop("region_source parameter is required")
+  }
+
+  if (is.null(region)) {
+    stop("region parameter is required")
+  }
+
+  if (verbose) {
+    message("Fetching Global Fishing Watch data...")
+    message(sprintf("Spatial resolution: %s", spatial_resolution))
+    message(sprintf("Temporal resolution: %s", temporal_resolution))
+    message(sprintf("Date range: %s to %s", start_date, end_date))
+    message(sprintf("Region source: %s", region_source))
+  }
+
+  # Retry logic for API calls
+  for (attempt in 1:max_retries) {
+    tryCatch(
+      {
+        # Call the gfwr package's get_raster function
+        result <- gfwr::get_raster(
+          spatial_resolution = spatial_resolution,
+          temporal_resolution = temporal_resolution,
+          start_date = start_date,
+          end_date = end_date,
+          region_source = region_source,
+          region = region,
+          group_by = group_by,
+          filter_by = filter_by,
+          key = api_key,
+          print_request = verbose
+        )
+
+        if (verbose) {
+          message(sprintf("Successfully retrieved %d records", nrow(result)))
+        }
+
+        return(result)
+      },
+      error = function(e) {
+        if (attempt == max_retries) {
+          stop(
+            "Failed to retrieve Global Fishing Watch data after ",
+            max_retries,
+            " attempts: ",
+            e$message
+          )
+        }
+        if (verbose) {
+          message(sprintf("Attempt %d failed, retrying...", attempt))
+        }
+        Sys.sleep(2^attempt) # Exponential backoff
+      }
+    )
+  }
+}

@@ -13,6 +13,8 @@
 #' @param verbose Logical. If TRUE, prints detailed progress messages. Default is FALSE.
 #' @param max_retries Integer. Maximum number of retry attempts for failed requests.
 #'   Default is 3.
+#' @param remove_archive Logical. If TRUE, remove the downloaded archive after
+#'   extracting its contents. Default is TRUE.
 #'
 #' @return Character vector of paths to processed data files, or a data.frame
 #'   for redlist data.
@@ -24,6 +26,8 @@
 #'
 #' The function downloads geodatabase archives, extracts them, and for redlist
 #' data, filters by the provided region and returns species information.
+#' When verbose = TRUE, the presigned download URL is printed before download to
+#' facilitate debugging.
 #'
 #' @export
 #'
@@ -36,17 +40,19 @@
 #'   datasets = c("redlist", "kba"),
 #'   ibat_api_key = "your_key",
 #'   ibat_token = "your_token",
-#'   path = "."
+#'   path = ".",
+#'   remove_archive = TRUE
 #' )
 #' }
-get_and_process_ibat_data <- function(
+get_ibat_data <- function(
   region_sf,
   datasets,
   ibat_api_key,
   ibat_token,
   path,
   verbose = FALSE,
-  max_retries = 3
+  max_retries = 3,
+  remove_archive = TRUE
 ) {
   if (!length(datasets)) {
     stop(
@@ -113,10 +119,15 @@ get_and_process_ibat_data <- function(
       stop("IBAT did not return a download_url for '", d, "'.", call. = FALSE)
     }
 
+    if (verbose) {
+      message(sprintf("Presigned URL for '%s': %s", d, presigned))
+    }
+
     # 2) Download archive (always overwrite)
-    archive <- file.path(path, "report", "tmp", paste0(d, "_ibat.tar.gz"))
+    archive <- file.path(path, paste0(d, "_ibat.tar.gz"))
     if (verbose) {
       message(sprintf("Downloading dataset '%s' archive...", d))
+      message(sprintf("URL: %s", presigned))
     }
 
     curl::curl_download(
@@ -127,14 +138,17 @@ get_and_process_ibat_data <- function(
     )
 
     # 3) Extract (always overwrite)
-    exdir <- file.path(path, "report", "tmp", paste0(d, "_ibat"))
+    exdir <- file.path(path, paste0(d, "_ibat"))
     if (verbose) {
       message(sprintf("Extracting dataset '%s'...", d))
     }
     utils::untar(archive, exdir = exdir)
 
     # 4) Remove the archive
-    unlink(archive, force = TRUE)
+    if (remove_archive) {
+      unlink(archive, force = TRUE)
+      message(sprintf("Archive removed: %s", archive))
+    }
 
     # 5) Return a .gdb path if found, else the extraction dir
     gdbs <- list.dirs(exdir, recursive = TRUE, full.names = TRUE)
@@ -242,7 +256,7 @@ get_and_process_ibat_data <- function(
       }
 
       # Save processed data
-      output_path <- file.path(path, "report", "tmp", "redlist.rds")
+      output_path <- file.path(path, "redlist.rds")
       saveRDS(result_df, output_path)
       result <- output_path
 

@@ -45,9 +45,40 @@ A data.frame with columns: isocode, Item, Year, Value, Unit, element_name.
 \description{
 Retrieves agricultural statistics from the Food and Agriculture Organization
 Statistics (FAOSTAT) API with built-in lookup tables for common items.
+
+**Note:** This function is designed for specific datasets and is not comprehensive.
+It works best with QCL database and common agricultural elements (2111, 2413, 2515, 7209).
 }
 \details{
 API Documentation: \url{https://www.fao.org/faostat/en/#data}
+
+**IMPORTANT: This function is NOT comprehensive and only supports specific datasets.**
+It currently works with a limited set of FAOSTAT databases and elements.
+
+**Currently Supported Data:**
+\itemize{
+  \item \strong{Database: QCL (Crops and Livestock Products)} - Primary supported database
+  \item \strong{Element 2111 (Stocks)} - Livestock population data
+  \item \strong{Element 2413 (Production)} - Crop production data
+  \item \strong{Element 2515 (Agricultural Use)} - Fertilizer and pesticide use
+  \item \strong{Element 7209 (Land Use)} - Land use statistics
+}
+
+**Built-in lookup tables** support:
+\itemize{
+  \item \strong{Animals (Element 2111):} cattle, sheep, chicken, goats, pigs, horses, buffalo, camels, rabbits, ducks
+  \item \strong{Crops (Element 2413):} wheat, rice, maize, barley, oats, rye, millet, sorghum, soybeans, sunflower, rapeseed, cotton, sugarcane, sugar_beet, potatoes, cassava
+  \item \strong{Fertilizers (Element 2515):} npk, nitrogen, phosphate, potash, urea, ammonium_sulfate, calcium_phosphate, pesticides_total
+  \item \strong{Land use (Element 7209):} agricultural_land, forest_land
+}
+
+**Limitations:**
+\itemize{
+  \item Only works with specific element codes (2111, 2413, 2515, 7209)
+  \item Primarily designed for QCL database
+  \item Lookup tables are limited to common agricultural items
+  \item For other databases/elements, use \code{use_lookup = FALSE} and provide exact codes
+}
 
 **Discovering Available Data:**
 
@@ -56,14 +87,6 @@ Use \code{list_faostat_metadata()} to discover available databases, elements, an
   \item \code{list_faostat_metadata("databases")} - List all databases
   \item \code{list_faostat_metadata("elements", database = "QCL")} - List elements
   \item \code{list_faostat_metadata("items", database = "QCL")} - List items
-}
-
-**Built-in lookup tables** support:
-\itemize{
-  \item Animals: cattle, sheep, chicken, goats, pigs, horses, buffalo, camels, etc.
-  \item Crops: wheat, rice, maize, barley, soybeans, potatoes, etc.
-  \item Fertilizers: npk, nitrogen, phosphate, potash, pesticides_total
-  \item Land use: agricultural_land, forest_land
 }
 }
 \examples{
