@@ -59,40 +59,40 @@ get_ibat_data <- function(
       "'datasets' must contain at least one name (e.g., 'kba' or 'redlist')."
     )
   }
-  .download_single_dataset <- function(d) {
-    if (verbose) {
-      message(sprintf("Fetching download URL for dataset: %s", d))
-    }
 
-    # 1) Get presigned URL with retry logic
+  .download_one_ibat <- function(dataset, api_key, token, dest, overwrite, retries, verbose) {
+    stopifnot(nzchar(dataset), nzchar(api_key), nzchar(token))
+
+    os <- tryCatch(Sys.info()[["sysname"]], error = function(...) .Platform$OS.type)
+
+    # Get presigned URL with retry logic
     retry_attempt <- 1
     success <- FALSE
-    response <- NULL
+    presigned <- NULL
 
-    while (retry_attempt <= max_retries && !success) {
+    while (retry_attempt <= retries && !success) {
       tryCatch(
         {
-          response <- httr2::request(
-            "https://app.ibat-alliance.org/api/v2/data-downloads"
-          ) %>%
+          response <- httr2::request("https://app.ibat-alliance.org/api/v2/data-downloads") %>%
             httr2::req_url_query(
-              dataset_name = d,
-              auth_key = ibat_api_key,
-              auth_token = ibat_token
+              dataset_name = dataset,
+              auth_key = api_key,
+              auth_token = token
             ) %>%
             httr2::req_perform() %>%
-            httr2::resp_body_json(check_type = FALSE)
+            httr2::resp_body_json()
+          presigned <- purrr::pluck(response, "download_url")
           success <- TRUE
         },
         error = function(e) {
-          if (retry_attempt < max_retries) {
+          if (retry_attempt < retries) {
             wait_time <- 2^retry_attempt
             if (verbose) {
               message(sprintf(
                 "Request failed for '%s' (attempt %d/%d): %s. Retrying in %d seconds...",
-                d,
+                dataset,
                 retry_attempt,
-                max_retries,
+                retries,
                 conditionMessage(e),
                 wait_time
               ))
@@ -103,8 +103,8 @@ get_ibat_data <- function(
             stop(
               sprintf(
                 "Failed to fetch IBAT data for '%s' after %d attempts. Last error: %s",
-                d,
-                max_retries,
+                dataset,
+                retries,
                 conditionMessage(e)
               ),
               call. = FALSE
@@ -114,46 +114,107 @@ get_ibat_data <- function(
       )
     }
 
-    presigned <- response[["download_url"]]
-    if (is.null(presigned)) {
-      stop("IBAT did not return a download_url for '", d, "'.", call. = FALSE)
+    if (is.null(presigned) || !nzchar(presigned)) {
+      stop("IBAT did not return a download_url for '", dataset, "'.", call. = FALSE)
     }
 
     if (verbose) {
-      message(sprintf("Presigned URL for '%s': %s", d, presigned))
+      message(sprintf("Presigned URL for '%s': %s", dataset, presigned))
+      message(sprintf("Downloading dataset '%s' archive...", dataset))
     }
 
-    # 2) Download archive (always overwrite)
-    archive <- file.path(path, paste0(d, "_ibat.tar.gz"))
-    if (verbose) {
-      message(sprintf("Downloading dataset '%s' archive...", d))
-      message(sprintf("URL: %s", presigned))
+    # Output path (name as .tar.gz since the object is compressed)
+    if (!dir.exists(dest)) {
+      dir.create(dest, recursive = TRUE, showWarnings = FALSE)
+    }
+    out_name <- paste0(dataset, "_ibat.tar.gz")
+    final_path <- file.path(dest, out_name)
+
+    if (file.exists(final_path)) {
+      if (!overwrite) {
+        stop("File exists: ", final_path, " (set overwrite=TRUE).", call. = FALSE)
+      }
+      unlink(final_path)
     }
 
-    curl::curl_download(
-      url = presigned,
-      destfile = archive,
-      handle = curl::new_handle(timeout = 0, resume_from = 0),
-      mode = "wb"
+    # Tuned curl handle; macOS prefers IPv4 + HTTP/1.1
+    h <- curl::new_handle()
+    if (identical(os, "Darwin")) {
+      curl::handle_setopt(h, ipresolve = 1, http_version = 1)
+    } else {
+      curl::handle_setopt(h, ipresolve = 0, http_version = 0)
+    }
+    curl::handle_setopt(
+      h,
+      tcp_nodelay = TRUE,
+      tcp_keepalive = TRUE,
+      connecttimeout = 30L,
+      low_speed_time = 30L,
+      low_speed_limit = 1024L,
+      buffersize = 256L * 1024L,
+      nosignal = TRUE
     )
 
-    # 3) Extract (always overwrite)
-    exdir <- file.path(path, paste0(d, "_ibat"))
+    # Try libcurl to disk, with optional retry
+    ok <- FALSE
+    for (i in 0:retries) {
+      ok <- try({
+        curl::curl_fetch_disk(presigned, final_path, handle = h)
+        TRUE
+      }, silent = TRUE)
+      if (isTRUE(ok)) break
+    }
+
+    # Fallback to system transfer tool if needed
+    if (!isTRUE(ok)) {
+      if (identical(os, "Darwin") || identical(os, "Linux")) {
+        extra <- "-L --fail --retry 2 --compressed"
+        if (identical(os, "Darwin")) {
+          extra <- paste(extra, "--http1.1 -4")
+        }
+        utils::download.file(
+          presigned,
+          final_path,
+          method = "curl",
+          extra = extra,
+          mode = "wb",
+          quiet = TRUE
+        )
+      } else {
+        utils::download.file(
+          presigned,
+          final_path,
+          method = "libcurl",
+          mode = "wb",
+          quiet = TRUE
+        )
+      }
+    }
+
+    if (!file.exists(final_path) || isTRUE(file.info(final_path)$size == 0)) {
+      stop("Download failed for '", dataset, "'.", call. = FALSE)
+    }
+
+    # Extract the tar.gz file directly to a .gdb folder
     if (verbose) {
-      message(sprintf("Extracting dataset '%s'...", d))
+      message(sprintf("Extracting dataset '%s'...", dataset))
     }
-    utils::untar(archive, exdir = exdir)
+    gdb_path <- file.path(dest, paste0(dataset, ".gdb"))
+    utils::untar(final_path, exdir = gdb_path)
 
-    # 4) Remove the archive
+    # Remove the archive if requested
     if (remove_archive) {
-      unlink(archive, force = TRUE)
-      message(sprintf("Archive removed: %s", archive))
+      unlink(final_path, force = TRUE)
+      if (verbose) {
+        message(sprintf("Archive removed: %s", final_path))
+      }
     }
 
-    # 5) Return a .gdb path if found, else the extraction dir
-    gdbs <- list.dirs(exdir, recursive = TRUE, full.names = TRUE)
-    gdbs <- gdbs[grepl("\\.gdb$", gdbs, ignore.case = TRUE)]
-    if (length(gdbs)) gdbs[[1]] else "No gdb file found"
+    # Return the .gdb path directly
+    if (!dir.exists(gdb_path)) {
+      stop("Extraction failed for '", dataset, "': .gdb folder not found.", call. = FALSE)
+    }
+    return(gdb_path)
   }
 
   # Download all datasets using purrr
@@ -164,7 +225,20 @@ get_ibat_data <- function(
     ))
   }
 
-  dataset_paths <- purrr::map_chr(datasets, .download_single_dataset)
+  dataset_paths <- purrr::map_chr(
+    datasets,
+    function(d) {
+      .download_one_ibat(
+        dataset = d,
+        api_key = ibat_api_key,
+        token = ibat_token,
+        dest = path,
+        overwrite = TRUE,
+        retries = max_retries,
+        verbose = verbose
+      )
+    }
+  )
   names(dataset_paths) <- datasets
   result <- dataset_paths
 
@@ -173,23 +247,11 @@ get_ibat_data <- function(
   }
   # Process redlist data if it was downloaded
   if ("redlist" %in% datasets) {
-    redlist_path <- dataset_paths[["redlist"]]
-    # Check if redlist.gdb exists
-    if (dir.exists(redlist_path)) {
+    redlist_gdb_path <- dataset_paths[["redlist"]]
+    # The .gdb path is returned directly from .download_one_ibat
+    if (dir.exists(redlist_gdb_path)) {
       if (verbose) {
         message("Processing redlist data for the specified region...")
-      }
-
-      redlist_gdb_path <- file.path(redlist_path, "redlist.gdb")
-      if (!dir.exists(redlist_gdb_path)) {
-        # If .gdb not found directly, look for it
-        gdbs <- list.dirs(redlist_path, recursive = TRUE, full.names = TRUE)
-        gdbs <- gdbs[grepl("\\.gdb$", gdbs, ignore.case = TRUE)]
-        if (length(gdbs)) {
-          redlist_gdb_path <- gdbs[[1]]
-        } else {
-          stop("No .gdb file found in redlist data", call. = FALSE)
-        }
       }
 
       # Process redlist data directly in this function
