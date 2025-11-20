@@ -47,7 +47,7 @@ Retrieves agricultural statistics from the Food and Agriculture Organization
 Statistics (FAOSTAT) API with built-in lookup tables for common items.
 
 **Note:** This function is designed for specific datasets and is not comprehensive.
-It works best with QCL database and common agricultural elements (2111, 2413, 2515, 7209).
+It works best with QCL, FBS, and FS databases and common agricultural elements (2111, 2413, 2515, 7209, 664, 674, 645, 6120).
 }
 \details{
 API Documentation: \url{https://www.fao.org/faostat/en/#data}
@@ -58,10 +58,16 @@ It currently works with a limited set of FAOSTAT databases and elements.
 **Currently Supported Data:**
 \itemize{
   \item \strong{Database: QCL (Crops and Livestock Products)} - Primary supported database
+  \item \strong{Database: FBS (Food Balance Sheets)} - Food supply and nutrition data
+  \item \strong{Database: FS (Food Security)} - Food security indicators (3-year averages)
   \item \strong{Element 2111 (Stocks)} - Livestock population data
   \item \strong{Element 2413 (Production)} - Crop production data
   \item \strong{Element 2515 (Agricultural Use)} - Fertilizer and pesticide use
   \item \strong{Element 7209 (Land Use)} - Land use statistics
+  \item \strong{Element 664 (Food supply kcal/capita/day)} - Dietary energy supply
+  \item \strong{Element 674 (Protein supply quantity)} - Protein supply data
+  \item \strong{Element 645 (Food supply quantity kg/capita/year)} - Food supply by food group
+  \item \strong{Element 6120 (Food security indicators)} - Share of dietary energy from food groups
 }
 
 **Built-in lookup tables** support:
@@ -70,14 +76,18 @@ It currently works with a limited set of FAOSTAT databases and elements.
   \item \strong{Crops (Element 2413):} wheat, rice, maize, barley, oats, rye, millet, sorghum, soybeans, sunflower, rapeseed, cotton, sugarcane, sugar_beet, potatoes, cassava
   \item \strong{Fertilizers (Element 2515):} npk, nitrogen, phosphate, potash, urea, ammonium_sulfate, calcium_phosphate, pesticides_total
   \item \strong{Land use (Element 7209):} agricultural_land, forest_land
+  \item \strong{Food Balance Sheets (Elements 664, 674):} grand_total, total (Item aggregated: Grand Total, code 2901)
+  \item \strong{Food Balance Sheets (Element 645):} cereals, starchy_roots, pulses, treenuts, vegetables, fruits, eggs, meat, fish, vegetable_oils (aggregated food groups)
+  \item \strong{Food Security (Element 6120):} cereals_roots_tubers, dietary_energy_cereals, share_cereals (3-year averages)
 }
 
 **Limitations:**
 \itemize{
-  \item Only works with specific element codes (2111, 2413, 2515, 7209)
-  \item Primarily designed for QCL database
+  \item Only works with specific element codes (2111, 2413, 2515, 7209, 664, 674, 645, 6120)
+  \item Primarily designed for QCL, FBS, and FS databases
   \item Lookup tables are limited to common agricultural items
   \item For other databases/elements, use \code{use_lookup = FALSE} and provide exact codes
+  \item FS database uses 3-year averages (e.g., 2000 represents 2000-2002)
 }
 
 **Discovering Available Data:**
@@ -118,6 +128,41 @@ wheat_data <- get_faostat_data(
   item = "15",
   database = "QCL",
   use_lookup = FALSE
+)
+
+# Get Food Balance Sheets data (dietary energy supply)
+fbs_data <- get_faostat_data(
+  element = "664",
+  item = "grand_total",
+  database = "FBS",
+  iso3 = "KEN",
+  mrv = 20
+)
+
+# Get Food Balance Sheets data (protein supply and dietary energy)
+fbs_nutrition <- get_faostat_data(
+  element = "664,674",
+  item = "grand_total",
+  database = "FBS",
+  iso3 = "KEN"
+)
+
+# Get Food Balance Sheets food supply quantity (kg/capita/year) by food group
+fbs_food_supply <- get_faostat_data(
+  element = "645",
+  item = c("cereals", "meat", "fish", "vegetables", "fruits"),
+  database = "FBS",
+  iso3 = "KEN",
+  mrv = 20
+)
+
+# Get Food Security data (3-year averages)
+fs_data <- get_faostat_data(
+  element = "6120",
+  item = "cereals_roots_tubers",
+  database = "FS",
+  iso3 = "KEN",
+  mrv = 20
 )
 }
 }

@@ -9,7 +9,8 @@ get_ilo_data(
   indicators,
   mrv = 23,
   verbose = FALSE,
-  max_retries = 3
+  max_retries = 3,
+  exclude_aggregates = TRUE
 )
 }
 \arguments{
@@ -25,10 +26,14 @@ Default is 23.}
 
 \item{max_retries}{Integer. Maximum number of retry attempts for failed requests.
 Default is 3.}
+
+\item{exclude_aggregates}{Logical. If TRUE (default), filters out regional and income group aggregates,
+returning only data for individual countries with valid ISO3 codes.}
 }
 \value{
 A data.frame with columns: isocode, Year, Value, and additional
   indicator-specific columns from the ILO API.
+  By default, only includes individual countries (aggregates excluded).
 }
 \description{
 Retrieves labor statistics from the International Labour Organization (ILO)
@@ -41,14 +46,25 @@ The function implements smart year discovery: if no data is found for the
 requested years, it progressively expands the year range (10, 20, 30 years,
 back to 1960) until data is found, then returns the most recent values up
 to the mrv limit.
+
+**Aggregate Filtering:** By default, the function excludes regional and income group
+aggregates to return only individual country data. Set `exclude_aggregates = FALSE`
+to include all entities.
 }
 \examples{
 \dontrun{
-# Get unemployment rate for Kenya
+# Get unemployment rate for Kenya (excludes aggregates by default)
 ilo_data <- get_ilo_data(
   iso3 = "KEN",
   indicators = "UNE_DEAP_SEX_AGE_RT_A",
   mrv = 10
+)
+
+# Get data for all countries and regions
+ilo_data_all <- get_ilo_data(
+  indicators = "UNE_DEAP_SEX_AGE_RT_A",
+  mrv = 10,
+  exclude_aggregates = FALSE
 )
 }
 }

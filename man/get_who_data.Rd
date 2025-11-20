@@ -9,7 +9,8 @@ get_who_data(
   indicators,
   mrv = 23,
   verbose = FALSE,
-  max_retries = 3
+  max_retries = 3,
+  exclude_aggregates = TRUE
 )
 }
 \arguments{
@@ -23,10 +24,14 @@ get_who_data(
 
 \item{max_retries}{Integer. Maximum number of retry attempts for failed requests.
 Default is 3.}
+
+\item{exclude_aggregates}{Logical. If TRUE (default), filters out regional and income group aggregates,
+returning only data for individual countries with valid ISO3 codes.}
 }
 \value{
 A data.frame with columns: isocode, Year, Value, indicator, and all
   available fields from the WHO API response.
+  By default, only includes individual countries (aggregates excluded).
 }
 \description{
 Retrieves health indicators from the World Health Organization Global Health
@@ -38,14 +43,25 @@ API Documentation: \url{https://www.who.int/data/gho/info/gho-odata-api}
 The function preserves all available fields from the WHO API while adding
 standardized columns (isocode, Year, Value). Implements smart year discovery
 similar to get_ilo_data().
+
+**Aggregate Filtering:** By default, the function excludes regional and income group
+aggregates to return only individual country data. Set `exclude_aggregates = FALSE`
+to include all entities.
 }
 \examples{
 \dontrun{
-# Get life expectancy data
+# Get life expectancy data for a specific country (excludes aggregates by default)
 who_data <- get_who_data(
   iso3 = "KEN",
   indicators = "WHOSIS_000001",
   mrv = 10
+)
+
+# Get data for all countries and regions
+who_data_all <- get_who_data(
+  indicators = "WHOSIS_000001",
+  mrv = 10,
+  exclude_aggregates = FALSE
 )
 }
 }

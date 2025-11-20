@@ -15,6 +15,8 @@
 #'   Default is 3.
 #' @param conda_env Character. Conda environment name for World Bank data source.
 #'   Required when source = "WorldBank". Default is NULL.
+#' @param database Integer. World Bank database ID. Default is NULL (all databases).
+#'   Use 88 for Food & Price Database, 2 for WDI, etc. Only applies to WorldBank source.
 #'
 #' @return A data.frame with columns varying by source, but typically including:
 #'   \itemize{
@@ -30,8 +32,9 @@
 #' needing to consult external documentation.
 #'
 #' **World Bank:** Requires Python with wbgapi package installed in a conda environment.
-#'   Fetches indicators from ALL available World Bank databases (WDI, Doing Business,
-#'   Debt Statistics, etc.) and includes database information in the result.
+#'   By default, fetches indicators from ALL available World Bank databases (WDI, Doing Business,
+#'   Debt Statistics, Food & Price, etc.). Use the `database` parameter to query a specific
+#'   database (e.g., 88 for Food & Price Database, 2 for WDI).
 #'
 #' **UNDP:** Requires API key (pass via `apikey` parameter or set UNDP_API_KEY
 #' environment variable).
@@ -51,13 +54,29 @@
 #'
 #' # Search for GDP indicators across all databases
 #' gdp_indicators <- list_un_indicators("WorldBank", search = "GDP", conda_env = "your_env_name")
+#'
+#' # List indicators from World Bank Food & Price Database (database 88)
+#' food_price_indicators <- list_un_indicators(
+#'   "WorldBank",
+#'   conda_env = "your_env_name",
+#'   database = 88
+#' )
+#'
+#' # Search for cost indicators in Food & Price Database
+#' cost_indicators <- list_un_indicators(
+#'   "WorldBank",
+#'   search = "cost",
+#'   conda_env = "your_env_name",
+#'   database = 88
+#' )
 #' }
 list_un_indicators <- function(
   source,
   search = NULL,
   verbose = FALSE,
   max_retries = 3,
-  conda_env = NULL
+  conda_env = NULL,
+  database = NULL
 ) {
   # Normalize source name
   source <- tolower(trimws(source))
@@ -78,7 +97,7 @@ list_un_indicators <- function(
   # Route to appropriate metadata fetcher based on source
   result <- switch(
     source,
-    "worldbank" = .fetch_wb_indicators(search, verbose, max_retries, conda_env),
+    "worldbank" = .fetch_wb_indicators(search, verbose, max_retries, conda_env, database),
     "unsdg" = .fetch_unsdg_indicators(search, verbose, max_retries),
     "undp" = .fetch_undp_indicators(search, verbose, max_retries),
     "ilo" = .fetch_ilo_indicators(search, verbose, max_retries),
@@ -105,7 +124,7 @@ list_un_indicators <- function(
 
 # Internal helper functions for fetching indicators from each source
 
-.fetch_wb_indicators <- function(search, verbose, max_retries, conda_env) {
+.fetch_wb_indicators <- function(search, verbose, max_retries, conda_env, database = NULL) {
   if (!is.null(conda_env)) {
     reticulate::use_condaenv(conda_env, required = TRUE)
   }
@@ -148,9 +167,18 @@ list_un_indicators <- function(
       dplyr::distinct()
   }
 
-  # run across 1:63, swallow errors per-db and return empty tibble when they occur
+  # Determine which databases to query
+  db_range <- if (!is.null(database)) {
+    # Query only the specified database
+    as.integer(database)
+  } else {
+    # Query all databases (1:63)
+    1:63
+  }
+
+  # run across db_range, swallow errors per-db and return empty tibble when they occur
   out <- purrr::map_dfr(
-    1:63,
+    db_range,
     purrr::possibly(one_db, otherwise = empty_tbl)
   ) %>%
     dplyr::distinct()
@@ -487,6 +515,7 @@ list_un_indicators <- function(
 #' @param exclude_aggregates Logical. If TRUE (default), filters out regional and income group aggregates,
 #'   returning only data for individual countries with valid ISO3 codes.
 #' @param max_retries Integer. Maximum number of retry attempts for failed requests. Default is 3.
+#' @param database Integer. World Bank database ID. Default is 2 (WDI). Use 88 for Food & Price Database.
 #'
 #' @return A data.frame with columns: isocode, Year, value, indicator.
 #'   By default, only includes individual countries (aggregates excluded).
@@ -528,6 +557,14 @@ list_un_indicators <- function(
 #'   exclude_aggregates = FALSE,
 #'   conda_env = "your_env_name"
 #' )
+#'
+#' # Get Food & Price Database indicators (database 88)
+#' food_price_data <- get_wb_data(
+#'   indicators = c("CoCA_PPP", "CoHD_fexp"),
+#'   mrv = 10,
+#'   conda_env = "your_env_name",
+#'   database = 88
+#' )
 #' }
 get_wb_data <- function(
   indicators,
@@ -536,7 +573,8 @@ get_wb_data <- function(
   verbose = FALSE,
   conda_env,
   exclude_aggregates = TRUE,
-  max_retries = 3
+  max_retries = 3,
+  database = 2
 ) {
   # Validate conda_env parameter
   if (missing(conda_env)) {
@@ -548,9 +586,12 @@ get_wb_data <- function(
 
   reticulate::use_condaenv(conda_env)
   wb <- reticulate::import("wbgapi")
+  
+  # Set database (default is 2 = WDI, but can be changed to 88 for Food & Price, etc.)
+  wb$db <- as.integer(database)
 
   if (verbose) {
-    message(sprintf("Fetching World Bank data for last %d years", mrv))
+    message(sprintf("Fetching World Bank data from database %d for last %d years", database, mrv))
   }
 
   # Process each indicator separately to maintain clear structure

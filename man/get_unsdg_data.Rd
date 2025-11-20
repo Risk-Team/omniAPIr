@@ -9,7 +9,8 @@ get_unsdg_data(
   iso3 = NULL,
   mrv = 23,
   verbose = FALSE,
-  max_retries = 3
+  max_retries = 3,
+  exclude_aggregates = TRUE
 )
 }
 \arguments{
@@ -23,10 +24,14 @@ get_unsdg_data(
 
 \item{max_retries}{Integer. Maximum number of retry attempts for failed requests.
 Default is 3.}
+
+\item{exclude_aggregates}{Logical. If TRUE (default), filters out regional and income group aggregates,
+returning only data for individual countries with valid ISO3 codes.}
 }
 \value{
 A data.frame with columns: indicator, series, seriesDescription, iso3,
   area, year, value, unit, source.
+  By default, only includes individual countries (aggregates excluded).
 }
 \description{
 Retrieves SDG indicator data from the United Nations Statistics Division API
@@ -38,14 +43,25 @@ API Documentation: \url{https://unstats.un.org/SDGAPI/swagger/}
 The function automatically converts ISO3 country codes to UN M49 numeric codes
 required by the API, retrieves data for the specified time period, and returns
 the most recent values.
+
+**Aggregate Filtering:** By default, the function excludes regional and income group
+aggregates (e.g., "World", "Sub-Saharan Africa") to return only individual country data.
+Set `exclude_aggregates = FALSE` to include all entities.
 }
 \examples{
 \dontrun{
-# Get SDG data for poverty indicators
+# Get SDG data for poverty indicators (excludes aggregates by default)
 sdg_data <- get_unsdg_data(
   indicators = c("1.1.1", "1.2.1"),
   iso3 = "KEN",
   mrv = 10
+)
+
+# Get data for all countries and regions
+sdg_data_all <- get_unsdg_data(
+  indicators = "1.1.1",
+  mrv = 5,
+  exclude_aggregates = FALSE
 )
 }
 }

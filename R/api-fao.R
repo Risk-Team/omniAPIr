@@ -1,3 +1,41 @@
+# Internal helper function to get ISO3 to M49 code mapping
+# FAOSTAT API requires M49 codes for area parameter, even when area_cs=ISO3
+.get_iso3_to_m49_lookup <- function() {
+  list(
+    "AFG" = "2", "ALB" = "3", "DZA" = "4", "AND" = "7", "AGO" = "8", "ATG" = "9",
+    "ARG" = "10", "ARM" = "11", "AUS" = "52", "AUT" = "12", "AZE" = "13", "BHS" = "16",
+    "BHR" = "14", "BGD" = "57", "BRB" = "255", "BLR" = "15", "BEL" = "23", "BLZ" = "53",
+    "BEN" = "18", "BTN" = "19", "BOL" = "80", "BIH" = "20", "BWA" = "21", "BRA" = "27",
+    "BRN" = "233", "BGR" = "35", "BFA" = "115", "BDI" = "32", "CPV" = "33", "KHM" = "40",
+    "CMR" = "351", "CAN" = "96", "CAF" = "128", "TCD" = "214", "CHL" = "41", "CHN" = "44",
+    "COL" = "45", "COM" = "46", "COG" = "48", "COK" = "98", "CRI" = "49", "HRV" = "50",
+    "CUB" = "167", "CYP" = "107", "CZE" = "116", "CIV" = "250", "PRK" = "54", "COD" = "72",
+    "DNK" = "56", "DJI" = "58", "DMA" = "59", "DOM" = "60", "ECU" = "63", "EGY" = "209",
+    "SLV" = "238", "GNQ" = "66", "ERI" = "67", "EST" = "68", "SWZ" = "70", "ETH" = "74",
+    "FJI" = "75", "FIN" = "73", "FRA" = "79", "GAB" = "81", "GMB" = "84", "GEO" = "86",
+    "DEU" = "89", "GHA" = "90", "GRC" = "175", "GRD" = "91", "GTM" = "93", "GIN" = "95",
+    "GNB" = "97", "GUY" = "99", "HTI" = "100", "HND" = "101", "HUN" = "102", "ISL" = "103",
+    "IND" = "104", "IDN" = "105", "IRN" = "106", "IRQ" = "109", "IRL" = "112", "ISR" = "108",
+    "ITA" = "114", "JAM" = "83", "JPN" = "118", "JOR" = "113", "KAZ" = "120", "KEN" = "114",
+    "KIR" = "119", "KWT" = "121", "KGZ" = "122", "LAO" = "123", "LVA" = "124", "LBN" = "126",
+    "LSO" = "256", "LBR" = "129", "LBY" = "130", "LTU" = "131", "LUX" = "132", "MDG" = "134",
+    "MWI" = "127", "MYS" = "136", "MDV" = "137", "MLI" = "138", "MLT" = "145", "MRT" = "141",
+    "MUS" = "273", "MEX" = "143", "MNG" = "144", "MNE" = "28", "MAR" = "147", "MOZ" = "148",
+    "MMR" = "149", "NAM" = "150", "NPL" = "153", "NLD" = "156", "NZL" = "157", "NIC" = "158",
+    "NER" = "159", "NGA" = "154", "MKD" = "162", "NOR" = "221", "OMN" = "165", "PAK" = "166",
+    "PAN" = "168", "PNG" = "169", "PRY" = "170", "PER" = "171", "PHL" = "173", "POL" = "174",
+    "PRT" = "179", "QAT" = "117", "KOR" = "146", "MDA" = "183", "ROU" = "185", "RUS" = "184",
+    "RWA" = "188", "KNA" = "189", "LCA" = "191", "VCT" = "244", "WSM" = "193", "STP" = "194",
+    "SAU" = "195", "SEN" = "272", "SRB" = "196", "SYC" = "197", "SLE" = "199", "SGP" = "198",
+    "SVK" = "25", "SVN" = "202", "SLB" = "203", "SOM" = "38", "ZAF" = "207", "SSD" = "210",
+    "ESP" = "211", "LKA" = "212", "SDN" = "208", "SUR" = "216", "SWE" = "176", "CHE" = "219",
+    "SYR" = "220", "TJK" = "222", "THA" = "213", "TLS" = "227", "TGO" = "223", "TON" = "226",
+    "TTO" = "230", "TUN" = "225", "TUR" = "229", "TKM" = "215", "UGA" = "231", "UKR" = "234",
+    "ARE" = "235", "GBR" = "155", "TZA" = "236", "USA" = "237", "URY" = "249", "UZB" = "251",
+    "VUT" = "242", "VEN" = "254", "VNM" = "251", "YEM" = "181", "ZMB" = "251", "ZWE" = "181"
+  )
+}
+
 #' Get FAOSTAT Agriculture Data
 #'
 #' @description
@@ -5,20 +43,22 @@
 #' Statistics (FAOSTAT) API with built-in lookup tables for common items.
 #'
 #' **Note:** This function is designed for specific datasets and is not comprehensive.
-#' It works best with QCL database and common agricultural elements (2111, 2413, 2515, 7209).
+#' It works best with QCL, FBS, FS, and CAHD databases and common agricultural elements (2111, 2413, 2515, 7209, 664, 674, 645, 6120).
 #'
 #' @importFrom magrittr %>%
 #'
 #' @param element Character or numeric. Element code specifying the type of
-#'   measurement (e.g., "2111" for livestock stocks, "2413" for crop production).
+#'   measurement (e.g., "2111" for livestock stocks, "2413" for crop production, "6120" for cost indicators).
 #' @param item Character or numeric. Item code(s) or common names. When use_lookup
-#'   is TRUE, accepts friendly names like "cattle", "wheat", etc.
+#'   is TRUE, accepts friendly names like "cattle", "wheat", "healthy_diet", etc.
 #' @param database Character. FAOSTAT database name (required).
 #' @param item_cs Character. Item classification system. Default is NULL.
 #' @param use_lookup Logical. Whether to use built-in lookup tables to convert
 #'   common names to item codes. Default is TRUE.
 #' @param mrv Integer. Most Recent Values - number of years to retrieve. Default is 50.
 #' @param iso3 Character. ISO3 country code to filter data. Default is NULL (all countries).
+#' @param release Character. Release version for CAHD database (e.g., "7S2025" for July 2025).
+#'   Default is NULL (auto-set to latest for CAHD).
 #' @param verbose Logical. If TRUE, prints detailed progress messages. Default is FALSE.
 #' @param max_retries Integer. Maximum number of retry attempts for failed requests.
 #'   Default is 3.
@@ -34,10 +74,17 @@
 #' **Currently Supported Data:**
 #' \itemize{
 #'   \item \strong{Database: QCL (Crops and Livestock Products)} - Primary supported database
+#'   \item \strong{Database: FBS (Food Balance Sheets)} - Food supply and nutrition data
+#'   \item \strong{Database: FS (Food Security)} - Food security indicators (3-year averages)
+#'   \item \strong{Database: CAHD (Cost and Affordability of a Healthy Diet)} - Diet cost indicators
 #'   \item \strong{Element 2111 (Stocks)} - Livestock population data
 #'   \item \strong{Element 2413 (Production)} - Crop production data
 #'   \item \strong{Element 2515 (Agricultural Use)} - Fertilizer and pesticide use
 #'   \item \strong{Element 7209 (Land Use)} - Land use statistics
+#'   \item \strong{Element 664 (Food supply kcal/capita/day)} - Dietary energy supply
+#'   \item \strong{Element 674 (Protein supply quantity)} - Protein supply data
+#'   \item \strong{Element 645 (Food supply quantity kg/capita/year)} - Food supply by food group
+#'   \item \strong{Element 6120 (Cost indicators)} - Food security indicators (FS) and diet cost (CAHD)
 #' }
 #'
 #' **Built-in lookup tables** support:
@@ -46,14 +93,20 @@
 #'   \item \strong{Crops (Element 2413):} wheat, rice, maize, barley, oats, rye, millet, sorghum, soybeans, sunflower, rapeseed, cotton, sugarcane, sugar_beet, potatoes, cassava
 #'   \item \strong{Fertilizers (Element 2515):} npk, nitrogen, phosphate, potash, urea, ammonium_sulfate, calcium_phosphate, pesticides_total
 #'   \item \strong{Land use (Element 7209):} agricultural_land, forest_land
+#'   \item \strong{Food Balance Sheets (Elements 664, 674):} grand_total, total (Item aggregated: Grand Total, code 2901)
+#'   \item \strong{Food Balance Sheets (Element 645):} cereals, starchy_roots, pulses, treenuts, vegetables, fruits, eggs, meat, fish, vegetable_oils (aggregated food groups)
+#'   \item \strong{Food Security (Element 6120 - FS database):} cereals_roots_tubers, dietary_energy_cereals, share_cereals (3-year averages)
+#'   \item \strong{CAHD Cost Indicators (Element 6120 - CAHD database):} healthy_diet, starchy_staples, animal_source_food, vegetables, fruits (cost in PPP$/person/day)
 #' }
 #'
 #' **Limitations:**
 #' \itemize{
-#'   \item Only works with specific element codes (2111, 2413, 2515, 7209)
-#'   \item Primarily designed for QCL database
+#'   \item Only works with specific element codes (2111, 2413, 2515, 7209, 664, 674, 645, 6120)
+#'   \item Primarily designed for QCL, FBS, FS, and CAHD databases
 #'   \item Lookup tables are limited to common agricultural items
 #'   \item For other databases/elements, use \code{use_lookup = FALSE} and provide exact codes
+#'   \item FS database uses 3-year averages (e.g., 2000 represents 2000-2002)
+#'   \item CAHD database requires release parameter (auto-set to latest if not specified)
 #' }
 #'
 #' **Discovering Available Data:**
@@ -97,6 +150,51 @@
 #'   database = "QCL",
 #'   use_lookup = FALSE
 #' )
+#'
+#' # Get Food Balance Sheets data (dietary energy supply)
+#' fbs_data <- get_faostat_data(
+#'   element = "664",
+#'   item = "grand_total",
+#'   database = "FBS",
+#'   iso3 = "KEN",
+#'   mrv = 20
+#' )
+#'
+#' # Get Food Balance Sheets data (protein supply and dietary energy)
+#' fbs_nutrition <- get_faostat_data(
+#'   element = "664,674",
+#'   item = "grand_total",
+#'   database = "FBS",
+#'   iso3 = "KEN"
+#' )
+#'
+#' # Get Food Balance Sheets food supply quantity (kg/capita/year) by food group
+#' fbs_food_supply <- get_faostat_data(
+#'   element = "645",
+#'   item = c("cereals", "meat", "fish", "vegetables", "fruits"),
+#'   database = "FBS",
+#'   iso3 = "KEN",
+#'   mrv = 20
+#' )
+#'
+#' # Get Food Security data (3-year averages)
+#' fs_data <- get_faostat_data(
+#'   element = "6120",
+#'   item = "cereals_roots_tubers",
+#'   database = "FS",
+#'   iso3 = "KEN",
+#'   mrv = 20
+#' )
+#'
+#' # Get Cost and Affordability of a Healthy Diet (CAHD) data
+#' cahd_data <- get_faostat_data(
+#'   element = "6120",
+#'   item = c("healthy_diet", "starchy_staples", "animal_source_food", "vegetables", "fruits"),
+#'   database = "CAHD",
+#'   iso3 = "KEN",
+#'   release = "7S2025", # July 2025 release
+#'   mrv = 10
+#' )
 #' }
 get_faostat_data <- function(
   element,
@@ -106,6 +204,7 @@ get_faostat_data <- function(
   use_lookup = TRUE,
   mrv = 50,
   iso3 = NULL,
+  release = NULL,
   verbose = FALSE,
   max_retries = 3
 ) {
@@ -116,69 +215,148 @@ get_faostat_data <- function(
   current_year <- as.numeric(format(Sys.Date(), "%Y"))
   years <- (current_year - mrv + 1):current_year
 
+  # Auto-set item_cs for FBS database if not specified
+  if (is.null(item_cs) && !is.null(database) && toupper(database) == "FBS") {
+    item_cs <- "FBS"
+  }
+  
+  # Auto-set release for CAHD database if not specified (use latest July 2025 release)
+  if (is.null(release) && !is.null(database) && toupper(database) == "CAHD") {
+    release <- "7S2025"
+    if (verbose) {
+      message(sprintf("Using CAHD release: %s", release))
+    }
+  }
+
+  # ISO3 to M49 code lookup table (defined once, outside inner function)
+  # FAOSTAT API requires M49 codes for area parameter, even when area_cs=ISO3
+  iso3_to_m49 <- .get_iso3_to_m49_lookup()
+  
+  # Item lookup tables (defined once, outside inner function)
+  animal_lookup <- list(
+    "cattle" = "866",
+    "sheep" = "1057",
+    "chicken" = "1016",
+    "goats" = "976",
+    "pigs" = "1034",
+    "horses" = "1096",
+    "buffalo" = "946",
+    "camels" = "1126",
+    "rabbits" = "1141",
+    "ducks" = "1058"
+  )
+
+  crop_lookup <- list(
+    "wheat" = "15",
+    "rice" = "27",
+    "maize" = "56",
+    "barley" = "44",
+    "oats" = "75",
+    "rye" = "71",
+    "millet" = "79",
+    "sorghum" = "83",
+    "soybeans" = "236",
+    "sunflower" = "267",
+    "rapeseed" = "270",
+    "cotton" = "328",
+    "sugarcane" = "156",
+    "sugar_beet" = "157",
+    "potatoes" = "116",
+    "cassava" = "125"
+  )
+
+  fertilizer_and_pesticides_lookup <- list(
+    "npk" = "4021",
+    "nitrogen" = "4009",
+    "phosphate" = "4019",
+    "potash" = "4029",
+    "urea" = "4014",
+    "ammonium_sulfate" = "4010",
+    "calcium_phosphate" = "4020",
+    "pesticides_total" = "1357",
+    "total" = "1357"
+  )
+
+  land_use_lookup <- list(
+    "agricultural_land" = "6610",
+    "forest_land" = "6646"
+  )
+
+  fbs_lookup <- list(
+    "grand_total" = "2901",
+    "total" = "2901"
+  )
+
+  fbs_food_supply_kg_lookup <- list(
+    "cereals" = "2905",
+    "cereals_excluding_beer" = "2905",
+    "starchy_roots" = "2949",
+    "pulses" = "2960",
+    "treenuts" = "2919",
+    "vegetables" = "2943",
+    "fruits" = "2911",
+    "fruits_excluding_wine" = "2911",
+    "eggs" = "2907",
+    "meat" = "2912",
+    "fish" = "2914",
+    "fish_seafood" = "2914",
+    "vegetable_oils" = "2918"
+  )
+
+  fs_lookup <- list(
+    "cereals_roots_tubers" = "21012",
+    "dietary_energy_cereals" = "21012",
+    "share_cereals" = "21012"
+  )
+
+  # CAHD (Cost and Affordability of a Healthy Diet) lookup - Element 6120
+  # Cost indicators in PPP dollars per person per day
+  cahd_lookup <- list(
+    "healthy_diet" = "7008",
+    "cost_healthy_diet" = "7008",
+    "starchy_staples" = "7011",
+    "cost_starchy_staples" = "7011",
+    "animal_source_food" = "7007",
+    "cost_animal_food" = "7007",
+    "vegetables" = "7010",
+    "cost_vegetables" = "7010",
+    "fruits" = "7004",
+    "cost_fruits" = "7004"
+  )
+
   # Helper function to try fetching data with specific years
   try_fetch_data <- function(years_to_try) {
-    # FAOSTAT Item Code Lookup Tables
+    # FAOSTAT Item Code Lookup - uses lookup tables from outer scope
     if (use_lookup && is.character(item)) {
-      # Define lookup tables for different data types
-      animal_lookup <- list(
-        "cattle" = "866",
-        "sheep" = "1057",
-        "chicken" = "1016",
-        "goats" = "976",
-        "pigs" = "1034",
-        "horses" = "1096",
-        "buffalo" = "946",
-        "camels" = "1126",
-        "rabbits" = "1141",
-        "ducks" = "1058"
-      )
-
-      crop_lookup <- list(
-        "wheat" = "15",
-        "rice" = "27",
-        "maize" = "56",
-        "barley" = "44",
-        "oats" = "75",
-        "rye" = "71",
-        "millet" = "79",
-        "sorghum" = "83",
-        "soybeans" = "236",
-        "sunflower" = "267",
-        "rapeseed" = "270",
-        "cotton" = "328",
-        "sugarcane" = "156",
-        "sugar_beet" = "157",
-        "potatoes" = "116",
-        "cassava" = "125"
-      )
-
-      fertilizer_and_pesticides_lookup <- list(
-        "npk" = "4021", # NPK fertilizers
-        "nitrogen" = "4009", # Nitrogen fertilizers
-        "phosphate" = "4019", # Phosphate fertilizers
-        "potash" = "4029", # Potash fertilizers
-        "urea" = "4014", # Urea
-        "ammonium_sulfate" = "4010", # Ammonium sulfate
-        "calcium_phosphate" = "4020", # Calcium phosphate
-        "pesticides_total" = "1357", # Pesticides (total) - CORRECT CODE
-        "total" = "1357"
-      )
-
-      land_use_lookup <- list(
-        "agricultural_land" = "6610",
-        "forest_land" = "6646"
-      )
-
       # Determine which lookup table to use based on element
-      lookup_table <- switch(
-        as.character(element),
-        "2111" = animal_lookup, # Livestock
-        "2413" = crop_lookup, # Crop production
-        "2515" = fertilizer_and_pesticides_lookup, # Agricultural use (fertilizers and pesticides)
-        "7209" = land_use_lookup, # Land use
-        NULL
-      )
+      # Handle multiple elements (comma-separated) by checking if any match
+      element_str <- as.character(element)
+      element_codes <- base::trimws(base::strsplit(element_str, ",")[[1]])
+      
+      lookup_table <- NULL
+      for (elem_code in element_codes) {
+        # Check database to distinguish between FS and CAHD (both use element 6120)
+        if (elem_code == "6120" && !is.null(database) && toupper(database) == "CAHD") {
+          temp_table <- cahd_lookup # CAHD cost indicators
+        } else {
+          temp_table <- switch(
+            elem_code,
+            "2111" = animal_lookup, # Livestock
+            "2413" = crop_lookup, # Crop production
+            "2515" = fertilizer_and_pesticides_lookup, # Agricultural use (fertilizers and pesticides)
+            "7209" = land_use_lookup, # Land use
+            "664" = fbs_lookup, # Food supply (kcal/capita/day) - uses Grand Total item (2901)
+            "674" = fbs_lookup, # Protein supply quantity - uses Grand Total item (2901)
+            "645" = fbs_food_supply_kg_lookup, # Food supply quantity (kg/capita/year) - aggregated food groups
+            "6120" = fs_lookup, # Food Security indicators (3-year averages) - FS database
+            NULL
+          )
+        }
+        if (!is.null(temp_table)) {
+          lookup_table <- temp_table
+          break # Use first matching lookup table
+        }
+      }
 
       if (!is.null(lookup_table)) {
         # Handle both character vectors and comma-separated strings
@@ -215,37 +393,79 @@ get_faostat_data <- function(
     # 2413 = crop production
     # 2515 = Agricultural Use (for fertilizers)
     # 7209 = LUC
+    # 664 = Food supply (kcal/capita/day) - FBS
+    # 674 = Protein supply quantity - FBS
+    # 645 = Food supply quantity (kg/capita/year) - FBS
+    # 6120 = Food Security indicators (3-year averages) - FS / Cost indicators (PPP$/person/day) - CAHD
     # Items
     #  "866,1057,1016,976" Cattle, sheep, chicken and goats
     # "572,176,661,56,79,92,270,27,71,83,236,156,97,15"  several crops
     # "6610,6646" # agricultural land and forestry
     # "4021" # NPK fertilizers
+    # "2901" # Grand Total + (Total) - FBS
+    # "2905,2949,2960,2919,2943,2911,2907,2912,2914,2918" # FBS Food groups (kg/capita/year)
+    # "21012" # Share of dietary energy from cereals, roots, and tubers (%) - FS
+    # "7008,7011,7007,7010,7004" # CAHD cost indicators (healthy diet, starchy staples, animal food, vegetables, fruits)
     base <- paste0("https://faostatservices.fao.org/api/v1/en/data/", database)
 
     # Set area parameter based on whether iso3 is specified
+    # IMPORTANT: API requires M49 codes in area parameter, even when area_cs=ISO3
+    # iso3_to_m49 lookup is from outer scope
     area_param <- if (!is.null(iso3)) {
-      iso3 # Use specific country
+      # Convert ISO3 to M49 code using lookup from outer scope
+      m49_code <- iso3_to_m49[[iso3]]
+      if (is.null(m49_code)) {
+        stop(paste(
+          "Invalid ISO3 code:",
+          iso3,
+          "\nAvailable codes:",
+          paste(names(iso3_to_m49)[1:20], collapse = ", "),
+          "... (and more)"
+        ))
+      }
+      m49_code
     } else {
       "2,3,4,7,8,9,1,10,11,52,12,13,16,14,57,255,15,23,53,18,19,80,20,21,26,27,233,29,35,115,32,33,37,39,40,351,96,128,214,41,44,45,46,47,48,98,49,50,167,51,107,116,250,54,72,55,56,58,59,60,61,178,63,209,238,62,64,66,67,68,69,70,74,75,73,79,81,84,86,87,89,90,175,91,93,95,97,99,100,101,102,103,104,105,106,109,110,112,108,114,83,118,113,120,119,121,122,123,124,126,256,129,130,131,132,133,134,127,135,136,137,138,145,141,273,143,144,28,147,148,149,150,153,156,157,158,159,160,154,162,221,165,299,166,168,169,170,171,173,174,177,179,117,146,183,185,184,182,188,189,191,244,193,194,195,272,186,196,197,200,199,198,25,201,202,277,203,38,276,206,207,210,211,212,208,216,176,217,218,219,220,222,213,227,223,228,226,230,225,229,215,231,234,235,155,236,237,249,248,251,181" # All countries
     }
 
+    # Handle special year parameter for FS database (3-year averages)
+    # FS uses year3 parameter with format like 20003 (for 2000-2002 average)
+    if (!is.null(database) && toupper(database) == "FS") {
+      # Convert years to 3-year average format (e.g., 2000 -> 20003)
+      years_formatted <- paste0(years_to_try, "3")
+      year_param_name <- "year3"
+      year_param_value <- paste(years_formatted, collapse = ",")
+    } else {
+      year_param_name <- "year"
+      year_param_value <- paste(years_to_try, collapse = ",")
+    }
+    
     params <- list(
       area = area_param,
       area_cs = "ISO3",
       element = element, #What kind of measurement/statistic you want (e.g., production, area harvested, yield, etc.)
-      item = item, #What specific products/crops/commodities you want data for (e.g., wheat, maize, rice, etc.)
-      year = paste(years_to_try, collapse = ","),
-      show_codes = "true",
-      show_unit = "true",
-      show_flags = "true",
-      show_notes = "true",
-      null_values = "false",
-      output_type = "csv"
+      item = item #What specific products/crops/commodities you want data for (e.g., wheat, maize, rice, etc.)
     )
+    
+    # Add year parameter with appropriate name
+    params[[year_param_name]] <- year_param_value
+    
+    # Add remaining parameters
+    params$show_codes <- "true"
+    params$show_unit <- "true"
+    params$show_flags <- "true"
+    params$show_notes <- "true"
+    params$null_values <- "false"
+    params$output_type <- "csv"
 
     # Add item_cs only if specified (some databases don't use it)
     if (!is.null(item_cs)) {
       params$item_cs <- item_cs
+    }
+    
+    # Add release parameter for CAHD database
+    if (!is.null(release)) {
+      params$release <- release
     }
 
     # build the query string
@@ -258,6 +478,12 @@ get_faostat_data <- function(
 
     # Build the full URL
     url <- paste0(base, "?", qs)
+    
+    if (verbose) {
+      message(sprintf("API URL: %s", url))
+      message(sprintf("Item code(s): %s", item))
+      message(sprintf("Element code(s): %s", element))
+    }
 
     # Fetch and parse the data with retry logic
     retry_attempt <- 1
@@ -408,15 +634,24 @@ get_faostat_data <- function(
       )
     }
 
-    # Try progressively smaller year ranges to find available data
+    # Try progressively expanded year ranges to find available data
+    # Including more granular recent ranges for better data discovery
     year_ranges <- list(
-      (current_year - 10):current_year, # Last 10 years
-      (current_year - 20):current_year, # Last 20 years
-      (current_year - 30):current_year, # Last 30 years
-      1990:current_year, # Since 1990
-      1980:current_year, # Since 1980
-      1970:current_year, # Since 1970
-      1961:current_year # All available years since FAOSTAT start
+      (current_year - 5):current_year,   # Last 5 years (2020-2025)
+      (current_year - 10):current_year,  # Last 10 years (2015-2025)
+      2010:2023,                         # FBS exact data range (2010-2023)
+      (current_year - 15):current_year,  # Last 15 years (2010-2025)
+      (current_year - 20):current_year,  # Last 20 years (2005-2025)
+      (current_year - 25):current_year,  # Last 25 years (2000-2025)
+      (current_year - 30):current_year,  # Last 30 years (1995-2025)
+      (current_year - 35):current_year,  # Last 35 years (1990-2025)
+      1990:current_year,                 # Since 1990
+      1985:current_year,                 # Since 1985
+      1980:current_year,                 # Since 1980
+      1975:current_year,                 # Since 1975
+      1970:current_year,                 # Since 1970
+      1965:current_year,                 # Since 1965
+      1961:current_year                  # All available years since FAOSTAT start
     )
 
     for (year_range in year_ranges) {

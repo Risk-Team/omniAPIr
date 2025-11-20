@@ -4,7 +4,15 @@
 \alias{get_wb_data}
 \title{Get World Bank Development Indicators Data}
 \usage{
-get_wb_data(indicators, iso3 = NULL, mrv = 23, verbose = FALSE, conda_env)
+get_wb_data(
+  indicators,
+  iso3 = NULL,
+  mrv = 23,
+  verbose = FALSE,
+  conda_env,
+  exclude_aggregates = TRUE,
+  max_retries = 3
+)
 }
 \arguments{
 \item{indicators}{Character vector. World Bank indicator codes (required).}
@@ -16,9 +24,15 @@ get_wb_data(indicators, iso3 = NULL, mrv = 23, verbose = FALSE, conda_env)
 \item{verbose}{Logical. If TRUE, prints detailed progress messages. Default is FALSE.}
 
 \item{conda_env}{Character. Conda environment name containing wbgapi package (required).}
+
+\item{exclude_aggregates}{Logical. If TRUE (default), filters out regional and income group aggregates,
+returning only data for individual countries with valid ISO3 codes.}
+
+\item{max_retries}{Integer. Maximum number of retry attempts for failed requests. Default is 3.}
 }
 \value{
 A data.frame with columns: isocode, Year, value, indicator.
+  By default, only includes individual countries (aggregates excluded).
 }
 \description{
 Retrieves development indicators from the World Bank API using the wbgapi
@@ -30,14 +44,33 @@ API Documentation: \url{https://github.com/tgherzog/wbgapi}
 **Python Required:** This function requires Python and the wbgapi package
 installed in a conda environment. Specify the conda environment name using
 the `conda_env` parameter.
+
+**Aggregate Filtering:** By default, the function excludes regional and income group
+aggregates (e.g., "World", "Sub-Saharan Africa", "High income") to return only
+individual country data. Set `exclude_aggregates = FALSE` to include all entities.
 }
 \examples{
 \dontrun{
-# Get GDP data
+# Get GDP data for a specific country (excludes aggregates by default)
 wb_data <- get_wb_data(
   indicators = "NY.GDP.MKTP.CD",
   iso3 = "KEN",
   mrv = 10,
+  conda_env = "your_env_name"
+)
+
+# Get multiple indicators for all countries
+wb_data <- get_wb_data(
+  indicators = c("NY.GDP.MKTP.CD", "SP.POP.TOTL"),
+  mrv = 5,
+  conda_env = "your_env_name"
+)
+
+# Include regional aggregates in the results
+wb_data_with_aggregates <- get_wb_data(
+  indicators = "NY.GDP.MKTP.CD",
+  mrv = 10,
+  exclude_aggregates = FALSE,
   conda_env = "your_env_name"
 )
 }

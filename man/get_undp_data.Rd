@@ -11,7 +11,8 @@ get_undp_data(
   metadata = FALSE,
   mrv = 23,
   verbose = FALSE,
-  max_retries = 3
+  max_retries = 3,
+  exclude_aggregates = TRUE
 )
 }
 \arguments{
@@ -29,9 +30,13 @@ get_undp_data(
 
 \item{max_retries}{Integer. Maximum number of retry attempts for failed requests.
 Default is 3.}
+
+\item{exclude_aggregates}{Logical. If TRUE (default), filters out regional and income group aggregates,
+returning only data for individual countries with valid ISO3 codes.}
 }
 \value{
 A tibble containing UNDP data with year, country, and indicator values.
+  By default, only includes individual countries (aggregates excluded).
 }
 \description{
 Retrieves human development indicators from the UNDP Human Development Reports
@@ -43,15 +48,27 @@ API Documentation: \url{https://hdr.undp.org/data-center/documentation-and-downl
 **Authentication Required:** Obtain an API key from UNDP HDR data portal.
 
 The function implements smart year discovery similar to other get_* functions.
+
+**Aggregate Filtering:** By default, the function excludes regional and income group
+aggregates to return only individual country data. Set `exclude_aggregates = FALSE`
+to include all entities.
 }
 \examples{
 \dontrun{
-# Get HDI data
+# Get HDI data for a specific country (excludes aggregates by default)
 hdi_data <- get_undp_data(
   indicator = "hdi",
   apikey = "your_api_key",
   iso3 = "KEN",
   mrv = 10
+)
+
+# Include regional aggregates in the results
+hdi_data_all <- get_undp_data(
+  indicator = "hdi",
+  apikey = "your_api_key",
+  mrv = 10,
+  exclude_aggregates = FALSE
 )
 }
 }
