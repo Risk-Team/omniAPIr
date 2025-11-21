@@ -4,7 +4,14 @@
 \alias{get_osm_features}
 \title{Get OpenStreetMap Features}
 \usage{
-get_osm_features(region_sf, tag_sets, verbose = FALSE)
+get_osm_features(
+  region_sf,
+  tag_sets,
+  verbose = FALSE,
+  provider = "geofabrik",
+  match_level = 2,
+  max_download_size_mb = 1500
+)
 }
 \arguments{
 \item{region_sf}{An sf object defining the region of interest.}
@@ -13,6 +20,9 @@ get_osm_features(region_sf, tag_sets, verbose = FALSE)
 \url{https://taginfo.openstreetmap.org/} for valid tags.}
 
 \item{verbose}{Logical. If TRUE, prints detailed progress messages. Default is FALSE.}
+
+\item{provider}{Character. OSM data provider. Options: "geofabrik" (default),
+"bbbike", "openstreetmap_fr". See \code{osmextract::oe_providers()}.}
 }
 \value{
 A list containing:
@@ -26,14 +36,33 @@ A list containing:
 \description{
 Retrieves OpenStreetMap (OSM) features within a specified spatial region
 based on tag sets. Returns points, lines, polygons, and multipolygons
-separately.
+separately. Uses osmextract for efficient bulk data downloads.
 }
 \details{
 API Documentation: \url{https://wiki.openstreetmap.org/wiki/API}
 
-This function uses the osmdata package to query the Overpass API.
-All returned geometries are filtered to the input region and converted
-to WGS84 (EPSG:4326) coordinate system.
+This function uses the osmextract package to download bulk OSM data from
+providers like Geofabrik. This is more efficient and reliable than the
+Overpass API for large regions, as it downloads pre-processed extracts
+rather than querying the live database.
+
+**How it works:**
+1. Finds the smallest OSM extract covering the region (e.g., "Kenya")
+2. Downloads it ONCE in .pbf format (~100-200MB, cached locally)
+3. Converts to .gpkg format with requested tags as columns (cached)
+4. For each layer (points, lines, multipolygons):
+   - Ensures tag columns exist via \code{extra_tags} parameter
+   - Filters by tags using SQL at the database level (efficient)
+   - Spatially clips to region boundaries using GDAL
+   - Only filtered results are loaded into R memory
+5. Returns sf objects in WGS84 (EPSG:4326)
+
+**Performance notes:**
+- First run: Downloads + converts data (few minutes for country-sized regions)
+- Subsequent runs: Uses cached data (seconds, unless new tags requested)
+- Tag filtering happens at SQL level, NOT by loading all data into R
+- The \code{extra_tags} parameter ensures tag keys are available as columns
+- No timeout issues unlike Overpass API
 }
 \examples{
 \dontrun{

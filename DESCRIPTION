@@ -40,7 +40,7 @@ Imports:
     readr,
     reticulate,
     rgbif,
-    osmdata,
+    osmextract,
     fishstat,
 Suggests:
     testthat (>= 3.0.0),

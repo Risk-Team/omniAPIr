@@ -2,66 +2,42 @@
 % Please edit documentation in R/api-un.R
 \name{get_who_data}
 \alias{get_who_data}
-\title{Get WHO Global Health Observatory Data}
+\title{Get WHO Global Health Observatory data}
 \usage{
 get_who_data(
-  iso3 = NULL,
   indicators,
-  mrv = 23,
-  verbose = FALSE,
-  max_retries = 3,
-  exclude_aggregates = TRUE
+  iso3 = NULL,
+  mrv = 10,
+  exclude_aggregates = TRUE,
+  verbose = FALSE
 )
 }
 \arguments{
-\item{iso3}{Character. ISO3 country code to filter data. Default is NULL (all countries).}
+\item{indicators}{Character vector of WHO GHO indicator codes (required).}
 
-\item{indicators}{Character vector. WHO GHO indicator codes (required).}
+\item{iso3}{Optional ISO3 country code (e.g. "KEN") to filter on SpatialDim.
+If NULL (default), returns all entities.}
 
-\item{mrv}{Integer. Most Recent Values - number of years to retrieve. Default is 23.}
+\item{mrv}{Integer. Number of most recent years per country/indicator to keep.
+Default is 10.}
 
-\item{verbose}{Logical. If TRUE, prints detailed progress messages. Default is FALSE.}
+\item{exclude_aggregates}{Logical. If TRUE (default), drop regional/income
+aggregates using `countrycode` on ISO3 codes.}
 
-\item{max_retries}{Integer. Maximum number of retry attempts for failed requests.
-Default is 3.}
-
-\item{exclude_aggregates}{Logical. If TRUE (default), filters out regional and income group aggregates,
-returning only data for individual countries with valid ISO3 codes.}
+\item{verbose}{Logical. If TRUE, prints URLs and a final row count.}
 }
 \value{
-A data.frame with columns: isocode, Year, Value, indicator, and all
-  available fields from the WHO API response.
-  By default, only includes individual countries (aggregates excluded).
+A tibble with all original WHO fields plus:
+  - `indicator`
+  - `isocode`
+  - `Year`
+  - `Value`
 }
 \description{
-Retrieves health indicators from the World Health Organization Global Health
-Observatory (WHO GHO) API with automatic year discovery.
-}
-\details{
-API Documentation: \url{https://www.who.int/data/gho/info/gho-odata-api}
-
-The function preserves all available fields from the WHO API while adding
-standardized columns (isocode, Year, Value). Implements smart year discovery
-similar to get_ilo_data().
-
-**Aggregate Filtering:** By default, the function excludes regional and income group
-aggregates to return only individual country data. Set `exclude_aggregates = FALSE`
-to include all entities.
-}
-\examples{
-\dontrun{
-# Get life expectancy data for a specific country (excludes aggregates by default)
-who_data <- get_who_data(
-  iso3 = "KEN",
-  indicators = "WHOSIS_000001",
-  mrv = 10
-)
-
-# Get data for all countries and regions
-who_data_all <- get_who_data(
-  indicators = "WHOSIS_000001",
-  mrv = 10,
-  exclude_aggregates = FALSE
-)
-}
+Simple wrapper around the WHO GHO API:
+- builds the URL(s)
+- fetches raw data
+- standardises isocode / Year / Value
+- keeps the most recent `mrv` years
+- optionally drops aggregates.
 }

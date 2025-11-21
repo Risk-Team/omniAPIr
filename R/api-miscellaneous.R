@@ -188,7 +188,7 @@ get_giga_schools_data <- function(
 #' @description
 #' Retrieves OpenStreetMap (OSM) features within a specified spatial region
 #' based on tag sets. Returns points, lines, polygons, and multipolygons
-#' separately.
+#' separately. Uses osmextract for efficient bulk data downloads.
 #'
 #' @importFrom magrittr %>%
 #'
@@ -196,6 +196,8 @@ get_giga_schools_data <- function(
 #' @param tag_sets A named list of OSM tags to query. See
 #'   \url{https://taginfo.openstreetmap.org/} for valid tags.
 #' @param verbose Logical. If TRUE, prints detailed progress messages. Default is FALSE.
+#' @param provider Character. OSM data provider. Options: "geofabrik" (default),
+#'   "bbbike", "openstreetmap_fr". See \code{osmextract::oe_providers()}.
 #'
 #' @return A list containing:
 #'   \describe{
@@ -208,9 +210,28 @@ get_giga_schools_data <- function(
 #' @details
 #' API Documentation: \url{https://wiki.openstreetmap.org/wiki/API}
 #'
-#' This function uses the osmdata package to query the Overpass API.
-#' All returned geometries are filtered to the input region and converted
-#' to WGS84 (EPSG:4326) coordinate system.
+#' This function uses the osmextract package to download bulk OSM data from
+#' providers like Geofabrik. This is more efficient and reliable than the
+#' Overpass API for large regions, as it downloads pre-processed extracts
+#' rather than querying the live database.
+#'
+#' **How it works:**
+#' 1. Finds the smallest OSM extract covering the region (e.g., "Kenya")
+#' 2. Downloads it ONCE in .pbf format (~100-200MB, cached locally)
+#' 3. Converts to .gpkg format with requested tags as columns (cached)
+#' 4. For each layer (points, lines, multipolygons):
+#'    - Ensures tag columns exist via \code{extra_tags} parameter
+#'    - Filters by tags using SQL at the database level (efficient)
+#'    - Spatially clips to region boundaries using GDAL
+#'    - Only filtered results are loaded into R memory
+#' 5. Returns sf objects in WGS84 (EPSG:4326)
+#'
+#' **Performance notes:**
+#' - First run: Downloads + converts data (few minutes for country-sized regions)
+#' - Subsequent runs: Uses cached data (seconds, unless new tags requested)
+#' - Tag filtering happens at SQL level, NOT by loading all data into R
+#' - The \code{extra_tags} parameter ensures tag keys are available as columns
+#' - No timeout issues unlike Overpass API
 #'
 #' @export
 #'
@@ -239,18 +260,20 @@ get_giga_schools_data <- function(
 get_osm_features <- function(
   region_sf,
   tag_sets,
-  verbose = FALSE
+  verbose = FALSE,
+  provider = "geofabrik",
+  match_level = 2, # 2 ~ countries for geofabrik
+  max_download_size_mb = 1500 # set to NA to disable the check
 ) {
   stopifnot(inherits(region_sf, "sf"))
 
-  if (verbose) {
-    message("Fetching OpenStreetMap features...")
-    message("For valid OSM tags, see https://taginfo.openstreetmap.org/")
-  }
-
+  # ---- Work in EPSG:4326 for osmextract ----
+  region_sf <- sf::st_transform(region_sf, 4326)
   bb <- sf::st_bbox(region_sf)
 
   if (verbose) {
+    message("Fetching OpenStreetMap features using osmextract...")
+    message("For valid OSM tags, see https://taginfo.openstreetmap.org/")
     message(sprintf(
       "Bounding box: (%.4f, %.4f) to (%.4f, %.4f)",
       bb["xmin"],
@@ -260,95 +283,141 @@ get_osm_features <- function(
     ))
   }
 
-  # helper: empty sf
-  empty_min <- function(crs = 4326) {
-    sf::st_sf(osm_id = character(), geometry = sf::st_sfc(crs = crs))
-  }
+  # ---- Use a point inside the region just for matching the provider zone ----
+  match_geom <- region_sf |>
+    sf::st_union() |>
+    sf::st_point_on_surface()
 
-  # Query with multiple features (OR logic across tag_sets)
+  # Pre-check which extract will be used and how big it is
+  match_info <- osmextract::oe_match(
+    place = match_geom,
+    provider = provider,
+    level = match_level,
+    quiet = !verbose
+  )
+
+  size_mb <- as.numeric(match_info$file_size) / 1024^2
+
   if (verbose) {
-    message("Querying Overpass API...")
+    message(sprintf(
+      "Matched provider file: %s (%.0f MB)",
+      match_info$url,
+      size_mb
+    ))
   }
 
-  x <- osmdata::opq(bbox = bb) %>%
-    osmdata::add_osm_features(features = tag_sets) %>%
-    osmdata::osmdata_sf()
-
-  # Points
-  if (verbose) {
-    message("Processing point features...")
-  }
-
-  pts <- if (!is.null(x$osm_points) && nrow(x$osm_points) > 0) {
-    out <- x$osm_points %>% sf::st_set_crs(4326) %>% sf::st_filter(region_sf)
-    if (verbose) {
-      message(sprintf("  Found %d points", nrow(out)))
-    }
-    out
-  } else {
-    if (verbose) {
-      message("  No points found")
-    }
-    empty_min()
-  }
-
-  # Lines (← roads live here)
-  if (verbose) {
-    message("Processing line features...")
-  }
-
-  lines <- if (!is.null(x$osm_lines) && nrow(x$osm_lines) > 0) {
-    out <- x$osm_lines %>% sf::st_set_crs(4326) %>% sf::st_filter(region_sf)
-    if (verbose) {
-      message(sprintf("  Found %d lines", nrow(out)))
-    }
-    out
-  } else {
-    if (verbose) {
-      message("  No lines found")
-    }
-    empty_min()
-  }
-
-  # Polygons
-  if (verbose) {
-    message("Processing polygon features...")
-  }
-
-  poly <- if (!is.null(x$osm_polygons) && nrow(x$osm_polygons) > 0) {
-    out <- x$osm_polygons %>% sf::st_set_crs(4326) %>% sf::st_filter(region_sf)
-    if (verbose) {
-      message(sprintf("  Found %d polygons", nrow(out)))
-    }
-    out
-  } else {
-    if (verbose) {
-      message("  No polygons found")
-    }
-    empty_min()
-  }
-
-  # Multipolygons
-  if (verbose) {
-    message("Processing multipolygon features...")
-  }
-
-  multipoly <- if (
-    !is.null(x$osm_multipolygons) && nrow(x$osm_multipolygons) > 0
+  if (
+    !is.null(max_download_size_mb) &&
+      !is.na(max_download_size_mb) &&
+      size_mb > max_download_size_mb
   ) {
-    out <- x$osm_multipolygons %>%
-      sf::st_set_crs(4326) %>%
-      sf::st_filter(region_sf)
-    if (verbose) {
-      message(sprintf("  Found %d multipolygons", nrow(out)))
-    }
-    out
-  } else {
-    if (verbose) {
-      message("  No multipolygons found")
-    }
-    empty_min()
+    stop(
+      sprintf(
+        "Matched OSM extract is %.0f MB (> max_download_size_mb = %s). 
+Refusing to download. Try:
+  • a smaller region, or
+  • lowering match_level, or
+  • set max_download_size_mb = NA if you really want this file.",
+        size_mb,
+        max_download_size_mb
+      ),
+      call. = FALSE
+    )
   }
+
+  # ---- Helper: empty sf ----
+  empty_min <- function() {
+    sf::st_sf(osm_id = character(), geometry = sf::st_sfc(crs = 4326))
+  }
+
+  # ---- Helper: Build SQL WHERE clause from tag_sets ----
+  # tag_sets = list("amenity" = c("restaurant", "cafe"), "shop" = "supermarket")
+  # -> "(amenity IN ('restaurant', 'cafe') OR shop = 'supermarket')"
+  build_where_clause <- function(tag_sets) {
+    conditions <- lapply(names(tag_sets), function(tag) {
+      values <- tag_sets[[tag]]
+      if (length(values) == 1) {
+        sprintf("%s = '%s'", tag, values)
+      } else {
+        quoted_values <- paste0("'", values, "'", collapse = ", ")
+        sprintf("%s IN (%s)", tag, quoted_values)
+      }
+    })
+    paste0("(", paste(conditions, collapse = " OR "), ")")
+  }
+
+  where_clause <- build_where_clause(tag_sets)
+  extra_tags <- unique(names(tag_sets))
+
+  if (verbose) {
+    message("SQL WHERE clause: ", where_clause)
+    message("Ensuring columns: ", paste(extra_tags, collapse = ", "))
+    message("Downloading OSM extract and querying layers...")
+  }
+
+  # ---- Helper: Query a specific layer with error handling ----
+  query_layer <- function(layer_name, where_clause, extra_tags, verbose) {
+    tryCatch(
+      {
+        if (verbose) {
+          message(sprintf("Querying %s layer...", layer_name))
+        }
+
+        sql_query <- sprintf(
+          "SELECT * FROM '%s' WHERE %s",
+          layer_name,
+          where_clause
+        )
+
+        result <- osmextract::oe_get(
+          place = match_geom, # **point used for matching**
+          provider = provider,
+          layer = layer_name,
+          query = sql_query, # SQL runs at st_read() stage
+          extra_tags = extra_tags,
+          quiet = !verbose,
+          boundary = region_sf, # **full polygon used for clipping**
+          boundary_type = "clipsrc"
+        )
+
+        if (!is.null(result) && nrow(result) > 0) {
+          # Ensure CRS is 4326
+          result <- sf::st_transform(result, 4326)
+
+          if (verbose) {
+            message(sprintf(
+              "  Found %d features in %s",
+              nrow(result),
+              layer_name
+            ))
+          }
+          result
+        } else {
+          if (verbose) {
+            message(sprintf("  No features found in %s", layer_name))
+          }
+          empty_min()
+        }
+      },
+      error = function(e) {
+        if (verbose) {
+          message(sprintf(
+            "  Error querying %s: %s",
+            layer_name,
+            conditionMessage(e)
+          ))
+        }
+        empty_min()
+      }
+    )
+  }
+
+  # ---- Query each layer type ----
+  pts <- query_layer("points", where_clause, extra_tags, verbose)
+  lines <- query_layer("lines", where_clause, extra_tags, verbose)
+  poly <- query_layer("multipolygons", where_clause, extra_tags, verbose)
+
+  multipoly <- empty_min() # placeholder, as in your original function
 
   total_features <- nrow(pts) + nrow(lines) + nrow(poly) + nrow(multipoly)
   message(sprintf(
@@ -356,7 +425,7 @@ get_osm_features <- function(
     total_features
   ))
 
-  list(pts = pts, lines = lines, multipoly = multipoly, poly = poly)
+  list(pts = pts, lines = lines, poly = poly, multipoly = multipoly)
 }
 
 

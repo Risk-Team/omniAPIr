@@ -97,7 +97,13 @@ list_un_indicators <- function(
   # Route to appropriate metadata fetcher based on source
   result <- switch(
     source,
-    "worldbank" = .fetch_wb_indicators(search, verbose, max_retries, conda_env, database),
+    "worldbank" = .fetch_wb_indicators(
+      search,
+      verbose,
+      max_retries,
+      conda_env,
+      database
+    ),
     "unsdg" = .fetch_unsdg_indicators(search, verbose, max_retries),
     "undp" = .fetch_undp_indicators(search, verbose, max_retries),
     "ilo" = .fetch_ilo_indicators(search, verbose, max_retries),
@@ -124,7 +130,13 @@ list_un_indicators <- function(
 
 # Internal helper functions for fetching indicators from each source
 
-.fetch_wb_indicators <- function(search, verbose, max_retries, conda_env, database = NULL) {
+.fetch_wb_indicators <- function(
+  search,
+  verbose,
+  max_retries,
+  conda_env,
+  database = NULL
+) {
   if (!is.null(conda_env)) {
     reticulate::use_condaenv(conda_env, required = TRUE)
   }
@@ -436,67 +448,268 @@ list_un_indicators <- function(
   return(result)
 }
 
-.fetch_who_indicators <- function(search, verbose, max_retries) {
+
+.fetch_who_indicators <- function(
+  search = NULL,
+  verbose = FALSE,
+  max_retries = 3
+) {
   base_url <- "https://ghoapi.azureedge.net/api/Indicator"
 
-  retry_attempt <- 1
-  success <- FALSE
-  response <- NULL
+  if (verbose) {
+    message("Requesting WHO indicators: ", base_url)
+  }
 
-  while (retry_attempt <= max_retries && !success) {
-    tryCatch(
-      {
-        response <- httr2::request(base_url) |>
-          httr2::req_perform()
-        httr2::resp_check_status(response)
-        success <- TRUE
-      },
-      error = function(e) {
-        if (retry_attempt < max_retries) {
-          wait_time <- 2^retry_attempt
-          if (verbose) {
-            message(sprintf(
-              "Request failed (attempt %d/%d): %s. Retrying in %d seconds...",
-              retry_attempt,
-              max_retries,
-              conditionMessage(e),
-              wait_time
-            ))
-          }
-          Sys.sleep(wait_time)
-          retry_attempt <<- retry_attempt + 1
-        } else {
-          stop(
-            sprintf(
-              "Failed to fetch WHO indicators after %d attempts: %s",
-              max_retries,
-              conditionMessage(e)
-            ),
-            call. = FALSE
-          )
-        }
+  fetch_with_retry <- function() {
+    last_err <- NULL
+    for (i in seq_len(max_retries)) {
+      if (verbose && max_retries > 1) {
+        message(sprintf("  Attempt %d/%d", i, max_retries))
       }
+
+      out <- tryCatch(
+        {
+          resp <- httr2::request(base_url) |>
+            httr2::req_perform()
+          httr2::resp_check_status(resp)
+          httr2::resp_body_json(resp)
+        },
+        error = function(e) {
+          last_err <<- e
+          if (i < max_retries) {
+            Sys.sleep(2^i)
+          }
+          NULL
+        }
+      )
+
+      if (!is.null(out)) return(out)
+    }
+
+    stop(
+      sprintf(
+        "Failed to fetch WHO indicators after %d attempts: %s",
+        max_retries,
+        conditionMessage(last_err)
+      ),
+      call. = FALSE
     )
   }
 
-  json <- httr2::resp_body_json(response)
+  json <- fetch_with_retry()
 
-  # Extract indicator codes and names
-  result <- tibble::tibble(
-    code = purrr::map_chr(json$value, ~ .x$IndicatorCode),
-    name = purrr::map_chr(json$value, ~ .x$IndicatorName)
-  )
+  if (is.null(json$value) || length(json$value) == 0) {
+    if (verbose) {
+      message("No indicator metadata returned by WHO.")
+    }
+    return(tibble::tibble(code = character(), name = character()))
+  }
+
+  # One row per indicator (handle potential NULLs gracefully)
+  df <- purrr::map_dfr(
+    json$value,
+    function(rec) {
+      rec_list <- as.list(rec)
+      # Only keep the fields we care about and replace NULL with NA
+      code <- rec_list$IndicatorCode %||% NA_character_
+      name <- rec_list$IndicatorName %||% NA_character_
+      tibble::tibble(code = code, name = name)
+    }
+  ) |>
+    dplyr::distinct()
 
   # Apply search filter if provided
   if (!is.null(search) && nchar(search) > 0) {
-    search_pattern <- paste0("(?i)", search)
-    result <- result %>%
+    pattern <- paste0("(?i)", search)
+    df <- df |>
       dplyr::filter(
-        grepl(search_pattern, code) | grepl(search_pattern, name)
+        grepl(pattern, code) | grepl(pattern, name)
       )
   }
 
-  return(result)
+  if (verbose) {
+    message(sprintf(
+      "✓ WHO indicators retrieved: %s rows",
+      format(nrow(df), big.mark = ",")
+    ))
+  }
+
+  df
+}
+
+
+#' Normalize World Bank Data Structure Across Databases
+#'
+#' @description
+#' Internal helper function that normalizes raw data from different World Bank
+#' databases into a consistent structure. Different databases return data in
+#' different formats (e.g., ISO codes in rownames vs. columns).
+#'
+#' **Adding Support for New Databases:**
+#' To add support for a new database, add a new case in the switch statement below
+#' with the database ID as a string (e.g., "57" for Debt Statistics). Document the
+#' database structure and any column transformations needed. The goal is to always
+#' return data with an 'isocode' column + year columns (YR2020, YR2021, etc.).
+#'
+#' @param raw_data Data frame returned by wb$data$DataFrame()
+#' @param database Integer. World Bank database ID
+#' @param verbose Logical. If TRUE, prints normalization details
+#'
+#' @return Data frame with standardized structure (isocode column + year columns)
+#'
+#' @keywords internal
+#' @noRd
+.normalize_wb_data_structure <- function(raw_data, database, verbose = FALSE) {
+  # ============================================================================
+  # Database-Specific Transformations
+  # ============================================================================
+  # Add new databases as switch cases below. Each case should:
+  # 1. Document the database structure
+  # 2. Transform to have an 'isocode' column
+  # 3. Remove any unnecessary metadata columns
+  # 4. Return a clean data frame ready for pivoting
+  # ============================================================================
+
+  normalized_data <- switch(
+    as.character(database),
+
+    # ========================================================================
+    # Database 2: WDI (World Development Indicators)
+    # ========================================================================
+    # Structure:
+    #   - ISO codes in rownames (e.g., "KEN", "USA")
+    #   - Year columns: YR2020, YR2021, etc.
+    #   - Country metadata columns: Country, Classification
+    # Transformation:
+    #   - Move rownames to 'isocode' column
+    # ========================================================================
+    "2" = {
+      if (verbose) {
+        message("  Normalizing WDI (database 2) structure")
+      }
+      raw_data %>%
+        tibble::rownames_to_column(var = "isocode")
+    },
+
+    # ========================================================================
+    # Database 88: Food & Price Database
+    # ========================================================================
+    # Structure varies based on labels parameter:
+    #   With labels=TRUE:
+    #     - 'Country' column with full country names (e.g., "Kenya", "United States")
+    #     - 'Classification' column: "Food Prices for Nutrition 4.0"
+    #   With labels=FALSE:
+    #     - 'economy' column with ISO codes (e.g., "KEN", "USA")
+    #     - 'classification' column: "FPN 4.0"
+    # Transformation:
+    #   - Convert Country names → ISO codes using countrycode
+    #   - OR rename 'economy' → 'isocode'
+    #   - Remove 'Classification'/'classification' column (metadata not needed)
+    # ========================================================================
+    "88" = {
+      if (verbose) {
+        message("  Normalizing Food & Price (database 88) structure")
+      }
+      result <- raw_data
+
+      # Case 1: labels=TRUE returns 'Country' column with full names
+      if ("Country" %in% names(result)) {
+        result <- result %>%
+          dplyr::mutate(
+            isocode = countrycode::countrycode(
+              Country,
+              origin = "country.name",
+              destination = "iso3c",
+              warn = FALSE
+            )
+          ) %>%
+          dplyr::select(-Country)
+      } else if ("economy" %in% names(result)) {
+        # Case 2: labels=FALSE returns 'economy' column with ISO codes
+        result <- result %>% dplyr::rename(isocode = economy)
+      }
+
+      # Remove classification column if present (not needed in final output)
+      if ("Classification" %in% names(result)) {
+        result <- result %>% dplyr::select(-Classification)
+      }
+      if ("classification" %in% names(result)) {
+        result <- result %>% dplyr::select(-classification)
+      }
+
+      result
+    },
+
+    # ========================================================================
+    # Default: Auto-detect structure for unspecified databases
+    # ========================================================================
+    # Heuristic-based detection:
+    #   1. If 'Country' column exists → convert country names to ISO codes
+    #   2. If 'economy' column exists → assume it contains ISO codes
+    #   3. Otherwise → assume ISO codes are in rownames (WDI-style)
+    #
+    # Note: For best results, add explicit case above for your database
+    # ========================================================================
+    {
+      if (verbose) {
+        message(sprintf("  Auto-detecting structure for database %d", database))
+      }
+
+      # Priority 1: 'Country' column with full names (labels=TRUE style)
+      if ("Country" %in% names(raw_data)) {
+        if (verbose) {
+          message(
+            "    Detected 'Country' column, converting names to ISO codes"
+          )
+        }
+        result <- raw_data %>%
+          dplyr::mutate(
+            isocode = countrycode::countrycode(
+              Country,
+              origin = "country.name",
+              destination = "iso3c",
+              warn = FALSE
+            )
+          ) %>%
+          dplyr::select(-Country)
+
+        # Remove classification if present
+        if ("Classification" %in% names(result)) {
+          result <- result %>% dplyr::select(-Classification)
+        }
+        if ("classification" %in% names(result)) {
+          result <- result %>% dplyr::select(-classification)
+        }
+
+        result
+      } else if ("economy" %in% names(raw_data)) {
+        # Priority 2: 'economy' column with ISO codes (labels=FALSE style)
+        if (verbose) {
+          message(
+            "    Detected 'economy' column, using Food & Price-style normalization"
+          )
+        }
+        result <- raw_data %>% dplyr::rename(isocode = economy)
+
+        # Remove classification if present
+        if ("classification" %in% names(result)) {
+          result <- result %>% dplyr::select(-classification)
+        }
+
+        result
+      } else {
+        # Priority 3: ISO codes in rownames (WDI-style)
+        if (verbose) {
+          message(
+            "    No 'Country' or 'economy' column found, using WDI-style normalization"
+          )
+        }
+        raw_data %>% tibble::rownames_to_column(var = "isocode")
+      }
+    }
+  )
+
+  return(normalized_data)
 }
 
 #' Get World Bank Development Indicators Data
@@ -530,6 +743,10 @@ list_un_indicators <- function(
 #' **Aggregate Filtering:** By default, the function excludes regional and income group
 #' aggregates (e.g., "World", "Sub-Saharan Africa", "High income") to return only
 #' individual country data. Set `exclude_aggregates = FALSE` to include all entities.
+#'
+#' **Multiple Databases:** This function automatically normalizes data structures across
+#' different World Bank databases to provide consistent output format. Database-specific
+#' logic is handled internally via `.normalize_wb_data_structure()` helper function.
 #'
 #' @export
 #'
@@ -586,12 +803,16 @@ get_wb_data <- function(
 
   reticulate::use_condaenv(conda_env)
   wb <- reticulate::import("wbgapi")
-  
+
   # Set database (default is 2 = WDI, but can be changed to 88 for Food & Price, etc.)
   wb$db <- as.integer(database)
 
   if (verbose) {
-    message(sprintf("Fetching World Bank data from database %d for last %d years", database, mrv))
+    message(sprintf(
+      "Fetching World Bank data from database %d for last %d years",
+      database,
+      mrv
+    ))
   }
 
   # Process each indicator separately to maintain clear structure
@@ -610,12 +831,15 @@ get_wb_data <- function(
               iso3,
               mrv = mrv,
               labels = TRUE
-            ) %>%
-              tibble::rownames_to_column(var = "isocode")
+            )
           } else {
-            raw_data <- wb$data$DataFrame(indicator, mrv = mrv, labels = TRUE) %>%
-              tibble::rownames_to_column(var = "isocode")
+            raw_data <- wb$data$DataFrame(indicator, mrv = mrv, labels = TRUE)
           }
+
+          # Normalize data structure based on database type
+          # This ensures consistent output format regardless of source database
+          raw_data <- .normalize_wb_data_structure(raw_data, database, verbose)
+
           success <- TRUE
         },
         error = function(e) {
@@ -1546,278 +1770,151 @@ get_ilo_data <- function(
 
   return(result)
 }
-#' Get WHO Global Health Observatory Data
+#' Get WHO Global Health Observatory data
 #'
-#' @description
-#' Retrieves health indicators from the World Health Organization Global Health
-#' Observatory (WHO GHO) API with automatic year discovery.
+#' Simple wrapper around the WHO GHO API:
+#' - builds the URL(s)
+#' - fetches raw data
+#' - standardises isocode / Year / Value
+#' - keeps the most recent `mrv` years
+#' - optionally drops aggregates.
 #'
-#' @importFrom magrittr %>%
+#' @param indicators Character vector of WHO GHO indicator codes (required).
+#' @param iso3 Optional ISO3 country code (e.g. "KEN") to filter on SpatialDim.
+#'   If NULL (default), returns all entities.
+#' @param mrv Integer. Number of most recent years per country/indicator to keep.
+#'   Default is 10.
+#' @param exclude_aggregates Logical. If TRUE (default), drop regional/income
+#'   aggregates using `countrycode` on ISO3 codes.
+#' @param verbose Logical. If TRUE, prints URLs and a final row count.
 #'
-#' @param iso3 Character. ISO3 country code to filter data. Default is NULL (all countries).
-#' @param indicators Character vector. WHO GHO indicator codes (required).
-#' @param mrv Integer. Most Recent Values - number of years to retrieve. Default is 23.
-#' @param verbose Logical. If TRUE, prints detailed progress messages. Default is FALSE.
-#' @param max_retries Integer. Maximum number of retry attempts for failed requests.
-#'   Default is 3.
-#' @param exclude_aggregates Logical. If TRUE (default), filters out regional and income group aggregates,
-#'   returning only data for individual countries with valid ISO3 codes.
-#'
-#' @return A data.frame with columns: isocode, Year, Value, indicator, and all
-#'   available fields from the WHO API response.
-#'   By default, only includes individual countries (aggregates excluded).
-#'
-#' @details
-#' API Documentation: \url{https://www.who.int/data/gho/info/gho-odata-api}
-#'
-#' The function preserves all available fields from the WHO API while adding
-#' standardized columns (isocode, Year, Value). Implements smart year discovery
-#' similar to get_ilo_data().
-#'
-#' **Aggregate Filtering:** By default, the function excludes regional and income group
-#' aggregates to return only individual country data. Set `exclude_aggregates = FALSE`
-#' to include all entities.
-#'
+#' @return A tibble with all original WHO fields plus:
+#'   - `indicator`
+#'   - `isocode`
+#'   - `Year`
+#'   - `Value`
 #' @export
-#'
-#' @examples
-#' \dontrun{
-#' # Get life expectancy data for a specific country (excludes aggregates by default)
-#' who_data <- get_who_data(
-#'   iso3 = "KEN",
-#'   indicators = "WHOSIS_000001",
-#'   mrv = 10
-#' )
-#'
-#' # Get data for all countries and regions
-#' who_data_all <- get_who_data(
-#'   indicators = "WHOSIS_000001",
-#'   mrv = 10,
-#'   exclude_aggregates = FALSE
-#' )
-#' }
 get_who_data <- function(
-  iso3 = NULL,
   indicators,
-  mrv = 23,
-  verbose = FALSE,
-  max_retries = 3,
-  exclude_aggregates = TRUE
+  iso3 = NULL,
+  mrv = 10,
+  exclude_aggregates = TRUE,
+  verbose = FALSE
 ) {
-  # Validate inputs
   if (missing(indicators) || length(indicators) == 0) {
-    stop("indicators parameter is required and must be a non-empty vector")
+    stop("`indicators` must be a non-empty character vector.")
+  }
+
+  indicators <- unique(indicators)
+
+  # ---- internal helper: fetch one indicator ---------------------------------
+  fetch_one_indicator <- function(ind) {
+    base_url <- sprintf("https://ghoapi.azureedge.net/api/%s", ind)
+
+    if (!is.null(iso3)) {
+      # Filter only by SpatialDim (ISO3)
+      url <- sprintf(
+        "%s?$filter=SpatialDim%%20eq%%20'%s'",
+        base_url,
+        iso3
+      )
+    } else {
+      url <- base_url
+    }
+
+    if (verbose) {
+      message("Requesting: ", url)
+    }
+
+    resp <- httr2::request(url) |>
+      httr2::req_perform() |>
+      httr2::resp_body_json()
+
+    # WHO returns records under `$value`
+    if (is.null(resp$value) || length(resp$value) == 0) {
+      if (verbose) {
+        message("  (no rows returned)")
+      }
+      return(NULL)
+    }
+
+    # One row per record, replacing NULL fields with NA
+    df <- purrr::map_dfr(
+      resp$value,
+      function(rec) {
+        rec_list <- as.list(rec)
+        # Replace NULL elements with NA so tibble is happy
+        null_idx <- vapply(rec_list, is.null, logical(1))
+        rec_list[null_idx] <- NA
+        tibble::as_tibble(rec_list, .name_repair = "unique")
+      }
+    )
+
+    df$indicator <- ind
+    df
+  }
+
+  # ---- fetch all indicators and bind ----------------------------------------
+  out_list <- lapply(indicators, fetch_one_indicator)
+  out <- dplyr::bind_rows(out_list)
+
+  if (nrow(out) == 0) {
+    if (verbose) {
+      message("No data returned by WHO API for these parameters.")
+    }
+    return(out)
+  }
+
+  # ---- standardise key columns ----------------------------------------------
+  if (!"SpatialDim" %in% names(out)) {
+    out$SpatialDim <- NA_character_
+  }
+  if (!"TimeDim" %in% names(out)) {
+    out$TimeDim <- NA
+  }
+  if (!"NumericValue" %in% names(out)) {
+    out$NumericValue <- NA
+  }
+
+  out <- out |>
+    dplyr::mutate(
+      isocode = SpatialDim,
+      Year = suppressWarnings(as.integer(TimeDim)),
+      Value = suppressWarnings(as.numeric(NumericValue))
+    )
+
+  # ---- keep most recent `mrv` years per country & indicator -----------------
+  if (!is.null(mrv) && mrv > 0) {
+    out <- out |>
+      dplyr::group_by(isocode, indicator) |>
+      dplyr::arrange(dplyr::desc(Year), .by_group = TRUE) |>
+      dplyr::slice_head(n = mrv) |>
+      dplyr::ungroup()
+  }
+
+  # ---- drop aggregates if requested -----------------------------------------
+  if (exclude_aggregates && "isocode" %in% names(out)) {
+    out <- out |>
+      dplyr::mutate(
+        is_valid_country = !is.na(
+          countrycode::countrycode(
+            isocode,
+            origin = "iso3c",
+            destination = "country.name",
+            warn = FALSE
+          )
+        )
+      ) |>
+      dplyr::filter(is_valid_country) |>
+      dplyr::select(-is_valid_country)
   }
 
   if (verbose) {
-    message(sprintf("Fetching WHO data for last %d years", mrv))
+    message(sprintf(
+      "✓ WHO data retrieved: %s rows",
+      format(nrow(out), big.mark = ",")
+    ))
   }
 
-  current_year <- as.numeric(format(Sys.Date(), "%Y"))
-  years <- (current_year - mrv + 1):current_year
-
-  # Helper function to try fetching data with specific years
-  try_fetch_who_data <- function(years_to_try) {
-    # Create simple data frame for indicators
-    indicators_df <- tibble::tibble(indicator = indicators)
-
-    # Fetch data - either for specific country or all countries
-    who_data <- indicators_df %>%
-      dplyr::mutate(
-        api_response = purrr::map(
-          indicator,
-          ~ {
-            if (!is.null(iso3)) {
-              # Fetch data for specific country
-              encoded_iso3 <- utils::URLencode(iso3, reserved = TRUE)
-              url <- paste0(
-                "https://ghoapi.azureedge.net/api/",
-                .x,
-                "?$filter=SpatialDim%20eq%20'",
-                encoded_iso3,
-                "'"
-              )
-            } else {
-              # Fetch data for all countries
-              url <- paste0("https://ghoapi.azureedge.net/api/", .x)
-            }
-
-            # Retry logic for each indicator
-            retry_attempt <- 1
-            success <- FALSE
-            result <- NULL
-
-            while (retry_attempt <= max_retries && !success) {
-              tryCatch(
-                {
-                  result <- httr2::request(url) |>
-                    httr2::req_perform() |>
-                    httr2::resp_body_json()
-                  success <- TRUE
-                },
-                error = function(e) {
-                  if (retry_attempt < max_retries) {
-                    wait_time <- 2^retry_attempt
-                    if (verbose) {
-                      message(sprintf(
-                        "Error for indicator %s (attempt %d/%d): %s. Retrying in %d seconds...",
-                        .x,
-                        retry_attempt,
-                        max_retries,
-                        conditionMessage(e),
-                        wait_time
-                      ))
-                    }
-                    Sys.sleep(wait_time)
-                    retry_attempt <<- retry_attempt + 1
-                  } else {
-                    if (verbose) {
-                      message(sprintf(
-                        "Error fetching data for indicator %s after %d attempts: %s",
-                        .x,
-                        max_retries,
-                        conditionMessage(e)
-                      ))
-                    }
-                    result <<- NULL
-                  }
-                }
-              )
-            }
-            return(result)
-          }
-        ),
-        all_values = purrr::map(
-          api_response,
-          ~ {
-            if (length(.x$value) > 0) .x$value else NULL
-          }
-        )
-      ) %>%
-      dplyr::filter(!purrr::map_lgl(all_values, is.null)) %>%
-      dplyr::select(indicator, all_values) %>%
-      tidyr::unnest_longer(all_values) %>%
-      dplyr::mutate(
-        # Extract all available fields from WHO API response safely
-        extracted_data = purrr::map(
-          all_values,
-          ~ {
-            # Create a safe extraction function for WHO API response
-            safe_extract <- function(obj, field, default = NA) {
-              if (field %in% names(obj) && !is.null(obj[[field]])) {
-                return(obj[[field]])
-              } else {
-                return(default)
-              }
-            }
-            # Extract all available fields from the response
-            result <- list()
-            for (field_name in names(.x)) {
-              result[[field_name]] <- safe_extract(.x, field_name)
-            }
-            # Add standardized column names while preserving originals
-            result$isocode <- safe_extract(.x, "SpatialDim")
-            result$Year <- as.integer(safe_extract(.x, "TimeDim", "0"))
-            result$Value <- as.numeric(safe_extract(.x, "NumericValue"))
-            # Convert to data frame with consistent structure
-            data.frame(result, stringsAsFactors = FALSE)
-          }
-        )
-      ) %>%
-      dplyr::select(indicator, extracted_data) %>%
-      tidyr::unnest(extracted_data) %>%
-      # Remove duplicates - take most recent entry for same indicator/year/country
-      dplyr::group_by(isocode, indicator, Year) %>%
-      dplyr::slice_tail(n = 1) %>%
-      dplyr::ungroup() %>%
-      dplyr::filter(Year %in% years_to_try)
-    return(who_data)
-  }
-  # Try fetching data with the requested years first
-  result <- try_fetch_who_data(years)
-
-  # If no data returned, implement smart year discovery
-  if (nrow(result) == 0) {
-    if (verbose) {
-      message(
-        "No data found for requested years. Trying to discover available years..."
-      )
-    }
-
-    # Try progressively larger year ranges to find available data
-    year_ranges <- list(
-      (current_year - 10):current_year, # Last 10 years
-      (current_year - 20):current_year, # Last 20 years
-      (current_year - 30):current_year, # Last 30 years
-      1990:current_year, # Since 1990
-      1980:current_year, # Since 1980
-      1970:current_year, # Since 1970
-      1960:current_year # All available years since WHO data typically starts
-    )
-
-    for (year_range in year_ranges) {
-      if (verbose) {
-        message(sprintf(
-          "Trying years: %d-%d",
-          min(year_range),
-          max(year_range)
-        ))
-      }
-      result <- try_fetch_who_data(year_range)
-
-      if (nrow(result) > 0) {
-        # Found data! Now return the most recent values within our mrv limit
-        available_years <- sort(unique(result$Year), decreasing = TRUE)
-        years_to_return <- head(available_years, mrv)
-        result <- result %>%
-          dplyr::filter(Year %in% years_to_return)
-
-        if (verbose) {
-          message(sprintf(
-            "Found data for years: %s",
-            paste(sort(years_to_return), collapse = ", ")
-          ))
-        }
-        break
-      }
-    }
-
-    if (nrow(result) == 0) {
-      message("No data found even with expanded year range")
-      return(result)
-    }
-  }
-
-  # Filter out aggregates by validating ISO codes (if requested)
-  if (exclude_aggregates && nrow(result) > 0 && "isocode" %in% names(result)) {
-    initial_rows <- nrow(result)
-
-    result <- result %>%
-      dplyr::mutate(
-        is_valid_country = !is.na(countrycode::countrycode(
-          isocode,
-          origin = "iso3c",
-          destination = "country.name",
-          warn = FALSE
-        ))
-      ) %>%
-      dplyr::filter(is_valid_country) %>%
-      dplyr::select(-is_valid_country)
-
-    filtered_rows <- initial_rows - nrow(result)
-
-    if (verbose && filtered_rows > 0) {
-      message(sprintf(
-        "  Excluded %s aggregate rows",
-        format(filtered_rows, big.mark = ",")
-      ))
-    }
-  }
-
-  message(sprintf(
-    "✓ WHO data retrieved successfully: %s rows",
-    format(nrow(result), big.mark = ",")
-  ))
-
-  return(result)
+  out
 }

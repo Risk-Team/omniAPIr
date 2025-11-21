@@ -11,7 +11,8 @@ get_wb_data(
   verbose = FALSE,
   conda_env,
   exclude_aggregates = TRUE,
-  max_retries = 3
+  max_retries = 3,
+  database = 2
 )
 }
 \arguments{
@@ -29,6 +30,8 @@ get_wb_data(
 returning only data for individual countries with valid ISO3 codes.}
 
 \item{max_retries}{Integer. Maximum number of retry attempts for failed requests. Default is 3.}
+
+\item{database}{Integer. World Bank database ID. Default is 2 (WDI). Use 88 for Food & Price Database.}
 }
 \value{
 A data.frame with columns: isocode, Year, value, indicator.
@@ -48,6 +51,10 @@ the `conda_env` parameter.
 **Aggregate Filtering:** By default, the function excludes regional and income group
 aggregates (e.g., "World", "Sub-Saharan Africa", "High income") to return only
 individual country data. Set `exclude_aggregates = FALSE` to include all entities.
+
+**Multiple Databases:** This function automatically normalizes data structures across
+different World Bank databases to provide consistent output format. Database-specific
+logic is handled internally via `.normalize_wb_data_structure()` helper function.
 }
 \examples{
 \dontrun{
@@ -72,6 +79,14 @@ wb_data_with_aggregates <- get_wb_data(
   mrv = 10,
   exclude_aggregates = FALSE,
   conda_env = "your_env_name"
+)
+
+# Get Food & Price Database indicators (database 88)
+food_price_data <- get_wb_data(
+  indicators = c("CoCA_PPP", "CoHD_fexp"),
+  mrv = 10,
+  conda_env = "your_env_name",
+  database = 88
 )
 }
 }

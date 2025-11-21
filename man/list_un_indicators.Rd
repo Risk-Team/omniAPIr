@@ -9,7 +9,8 @@ list_un_indicators(
   search = NULL,
   verbose = FALSE,
   max_retries = 3,
-  conda_env = NULL
+  conda_env = NULL,
+  database = NULL
 )
 }
 \arguments{
@@ -26,6 +27,9 @@ Default is 3.}
 
 \item{conda_env}{Character. Conda environment name for World Bank data source.
 Required when source = "WorldBank". Default is NULL.}
+
+\item{database}{Integer. World Bank database ID. Default is NULL (all databases).
+Use 88 for Food & Price Database, 2 for WDI, etc. Only applies to WorldBank source.}
 }
 \value{
 A data.frame with columns varying by source, but typically including:
@@ -46,8 +50,9 @@ This helper function makes it easier to discover available indicators without
 needing to consult external documentation.
 
 **World Bank:** Requires Python with wbgapi package installed in a conda environment.
-  Fetches indicators from ALL available World Bank databases (WDI, Doing Business,
-  Debt Statistics, etc.) and includes database information in the result.
+  By default, fetches indicators from ALL available World Bank databases (WDI, Doing Business,
+  Debt Statistics, Food & Price, etc.). Use the `database` parameter to query a specific
+  database (e.g., 88 for Food & Price Database, 2 for WDI).
 
 **UNDP:** Requires API key (pass via `apikey` parameter or set UNDP_API_KEY
 environment variable).
@@ -65,5 +70,20 @@ wb_indicators <- list_un_indicators("WorldBank", conda_env = "your_env_name")
 
 # Search for GDP indicators across all databases
 gdp_indicators <- list_un_indicators("WorldBank", search = "GDP", conda_env = "your_env_name")
+
+# List indicators from World Bank Food & Price Database (database 88)
+food_price_indicators <- list_un_indicators(
+  "WorldBank",
+  conda_env = "your_env_name",
+  database = 88
+)
+
+# Search for cost indicators in Food & Price Database
+cost_indicators <- list_un_indicators(
+  "WorldBank",
+  search = "cost",
+  conda_env = "your_env_name",
+  database = 88
+)
 }
 }
