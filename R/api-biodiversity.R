@@ -60,10 +60,20 @@ get_ibat_data <- function(
     )
   }
 
-  .download_one_ibat <- function(dataset, api_key, token, dest, overwrite, retries, verbose) {
+  .download_one_ibat <- function(
+    dataset,
+    api_key,
+    token,
+    dest,
+    overwrite,
+    retries,
+    verbose
+  ) {
     stopifnot(nzchar(dataset), nzchar(api_key), nzchar(token))
 
-    os <- tryCatch(Sys.info()[["sysname"]], error = function(...) .Platform$OS.type)
+    os <- tryCatch(Sys.info()[["sysname"]], error = function(...) {
+      .Platform$OS.type
+    })
 
     # Get presigned URL with retry logic
     retry_attempt <- 1
@@ -73,7 +83,9 @@ get_ibat_data <- function(
     while (retry_attempt <= retries && !success) {
       tryCatch(
         {
-          response <- httr2::request("https://app.ibat-alliance.org/api/v2/data-downloads") %>%
+          response <- httr2::request(
+            "https://app.ibat-alliance.org/api/v2/data-downloads"
+          ) %>%
             httr2::req_url_query(
               dataset_name = dataset,
               auth_key = api_key,
@@ -115,7 +127,12 @@ get_ibat_data <- function(
     }
 
     if (is.null(presigned) || !nzchar(presigned)) {
-      stop("IBAT did not return a download_url for '", dataset, "'.", call. = FALSE)
+      stop(
+        "IBAT did not return a download_url for '",
+        dataset,
+        "'.",
+        call. = FALSE
+      )
     }
 
     if (verbose) {
@@ -132,7 +149,12 @@ get_ibat_data <- function(
 
     if (file.exists(final_path)) {
       if (!overwrite) {
-        stop("File exists: ", final_path, " (set overwrite=TRUE).", call. = FALSE)
+        stop(
+          "File exists: ",
+          final_path,
+          " (set overwrite=TRUE).",
+          call. = FALSE
+        )
       }
       unlink(final_path)
     }
@@ -158,10 +180,13 @@ get_ibat_data <- function(
     # Try libcurl to disk, with optional retry
     ok <- FALSE
     for (i in 0:retries) {
-      ok <- try({
-        curl::curl_fetch_disk(presigned, final_path, handle = h)
-        TRUE
-      }, silent = TRUE)
+      ok <- try(
+        {
+          curl::curl_fetch_disk(presigned, final_path, handle = h)
+          TRUE
+        },
+        silent = TRUE
+      )
       if (isTRUE(ok)) break
     }
 
@@ -195,12 +220,13 @@ get_ibat_data <- function(
       stop("Download failed for '", dataset, "'.", call. = FALSE)
     }
 
-    # Extract the tar.gz file directly to a .gdb folder
+    # Extract the tar.gz file - archive contains dataset.gdb folder
     if (verbose) {
       message(sprintf("Extracting dataset '%s'...", dataset))
     }
+    # Extract to dest directly - the archive already contains the .gdb folder
+    utils::untar(final_path, exdir = dest)
     gdb_path <- file.path(dest, paste0(dataset, ".gdb"))
-    utils::untar(final_path, exdir = gdb_path)
 
     # Remove the archive if requested
     if (remove_archive) {
@@ -212,7 +238,12 @@ get_ibat_data <- function(
 
     # Return the .gdb path directly
     if (!dir.exists(gdb_path)) {
-      stop("Extraction failed for '", dataset, "': .gdb folder not found.", call. = FALSE)
+      stop(
+        "Extraction failed for '",
+        dataset,
+        "': .gdb folder not found.",
+        call. = FALSE
+      )
     }
     return(gdb_path)
   }

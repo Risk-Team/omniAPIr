@@ -263,7 +263,8 @@ get_osm_features <- function(
   verbose = FALSE,
   provider = "geofabrik",
   match_level = 2, # 2 ~ countries for geofabrik
-  max_download_size_mb = 1500 # set to NA to disable the check
+  max_download_size_mb = 1500, # set to NA to disable the check
+  layers = c("points", "lines", "multipolygons") # which layers to query
 ) {
   stopifnot(inherits(region_sf, "sf"))
 
@@ -412,10 +413,24 @@ Refusing to download. Try:
     )
   }
 
-  # ---- Query each layer type ----
-  pts <- query_layer("points", where_clause, extra_tags, verbose)
-  lines <- query_layer("lines", where_clause, extra_tags, verbose)
-  poly <- query_layer("multipolygons", where_clause, extra_tags, verbose)
+  # ---- Query only requested layers ----
+  pts <- if ("points" %in% layers) {
+    query_layer("points", where_clause, extra_tags, verbose)
+  } else {
+    empty_min()
+  }
+
+  lines <- if ("lines" %in% layers) {
+    query_layer("lines", where_clause, extra_tags, verbose)
+  } else {
+    empty_min()
+  }
+
+  poly <- if ("multipolygons" %in% layers) {
+    query_layer("multipolygons", where_clause, extra_tags, verbose)
+  } else {
+    empty_min()
+  }
 
   multipoly <- empty_min() # placeholder, as in your original function
 

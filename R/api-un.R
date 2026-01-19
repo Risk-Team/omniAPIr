@@ -948,7 +948,12 @@ get_wb_data <- function(
 #'   returning only data for individual countries with valid ISO3 codes.
 #'
 #' @return A data.frame with columns: indicator, series, seriesDescription, iso3,
-#'   area, year, value, unit, source.
+#'   area, year, value, unit, sex, age, location, reporting_type, source.
+#'   Dimension columns contain NA if not applicable to the indicator:
+#'   - `sex`: "BOTHSEX", "MALE", "FEMALE", etc.
+#'   - `age`: "ALLAGE", "15-49", "<5Y", etc.
+#'   - `location`: "ALLAREA", "URBAN", "RURAL"
+#'   - `reporting_type`: "G" (Global), "N" (National)
 #'   By default, only includes individual countries (aggregates excluded).
 #'
 #' @details
@@ -1025,88 +1030,121 @@ get_unsdg_data <- function(
     NULL
   }
 
-  # Calculate time periods for the last MRV years
+  # Calculate year range for filtering results (client-side)
+  # The SDG API works best without timePeriod filter - we fetch all and filter locally
+
   current_year <- as.numeric(format(Sys.Date(), "%Y"))
-  time_periods <- list((current_year - mrv + 1):current_year)
+  min_year <- current_year - mrv + 1
 
   fetch_one <- function(
     ind,
     area = NULL,
-    time_periods,
     base = "https://unstats.un.org/SDGAPI/v1/sdg/Indicator/Data"
   ) {
-    # Build query parameters according to Swagger docs
-    q <- list(
-      indicator = ind,
-      timePeriod = time_periods # Add time periods for latest MRV years
-    )
+    # Build query parameters - keep it simple like the working curl example
+    # Don't pass timePeriod; filter client-side instead
+    # Request large page size to minimize pagination
+    q <- list(indicator = ind, pageSize = 10000)
 
     if (!is.null(area)) {
-      q$areaCode <- area # Correct parameter name per Swagger docs
+      q$areaCode <- area
     }
 
-    # Retry logic
-    retry_attempt <- 1
-    success <- FALSE
-    resp <- NULL
+    all_data <- list()
+    page <- 1
+    total_pages <- 1
 
-    while (retry_attempt <= max_retries && !success) {
-      tryCatch(
-        {
-          resp <- httr2::request(base) |>
-            httr2::req_url_query(!!!q) |>
-            httr2::req_perform()
-          if (!httr2::resp_is_error(resp)) {
-            success <- TRUE
-          } else {
-            stop(sprintf("HTTP error %d", httr2::resp_status(resp)))
-          }
-        },
-        error = function(e) {
-          if (retry_attempt < max_retries) {
-            wait_time <- 2^retry_attempt
-            if (verbose) {
-              message(sprintf(
-                "Request failed (attempt %d/%d): %s. Retrying in %d seconds...",
-                retry_attempt,
-                max_retries,
-                conditionMessage(e),
-                wait_time
-              ))
+    # Fetch all pages
+
+    while (page <= total_pages) {
+      q$page <- page
+
+      # Retry logic
+      retry_attempt <- 1
+      success <- FALSE
+      resp <- NULL
+
+      while (retry_attempt <= max_retries && !success) {
+        tryCatch(
+          {
+            resp <- httr2::request(base) |>
+              httr2::req_url_query(!!!q) |>
+              httr2::req_perform()
+            if (!httr2::resp_is_error(resp)) {
+              success <- TRUE
+            } else {
+              stop(sprintf("HTTP error %d", httr2::resp_status(resp)))
             }
-            Sys.sleep(wait_time)
-            retry_attempt <<- retry_attempt + 1
-          } else {
-            message(sprintf(
-              "Request failed for indicator=%s area=%s after %d attempts",
-              ind,
-              ifelse(is.null(area), "ALL", area),
-              max_retries
-            ))
-            retry_attempt <<- retry_attempt + 1 # Exit loop
+          },
+          error = function(e) {
+            if (retry_attempt < max_retries) {
+              wait_time <- 2^retry_attempt
+              if (verbose) {
+                message(sprintf(
+                  "Request failed (attempt %d/%d): %s. Retrying in %d seconds...",
+                  retry_attempt,
+                  max_retries,
+                  conditionMessage(e),
+                  wait_time
+                ))
+              }
+              Sys.sleep(wait_time)
+              retry_attempt <<- retry_attempt + 1
+            } else {
+              message(sprintf(
+                "Request failed for indicator=%s area=%s page=%d after %d attempts",
+                ind,
+                ifelse(is.null(area), "ALL", area),
+                page,
+                max_retries
+              ))
+              retry_attempt <<- retry_attempt + 1 # Exit loop
+            }
           }
+        )
+      }
+
+      if (!success) {
+        break
+      }
+
+      # Parse response according to Swagger schema
+      response_content <- httr2::resp_body_string(resp)
+      parsed_response <- jsonlite::fromJSON(response_content, flatten = TRUE)
+
+      # Get pagination info from first page
+      if (page == 1) {
+        total_pages <- parsed_response$totalPages %||% 1
+        if (verbose) {
+          message(sprintf(
+            "  Indicator %s: %d total records across %d pages",
+            ind,
+            parsed_response$totalElements %||% 0,
+            total_pages
+          ))
         }
-      )
+      }
+
+      # Extract data array from response
+      dat <- parsed_response$data
+      if (!is.null(dat) && length(dat) > 0) {
+        all_data[[page]] <- dat
+      }
+
+      page <- page + 1
     }
 
-    if (!success) {
+    # Combine all pages
+    if (length(all_data) == 0) {
       return(tibble::tibble())
     }
 
-    # Parse response according to Swagger schema
-    response_content <- httr2::resp_body_string(resp)
-    parsed_response <- jsonlite::fromJSON(response_content, flatten = TRUE)
+    combined <- dplyr::bind_rows(all_data)
 
-    # Extract data array from response
-    dat <- parsed_response$data
-    if (is.null(dat) || !length(dat)) {
-      return(tibble::tibble())
-    }
-
-    dplyr::as_tibble(dat) %>%
+    dplyr::as_tibble(combined) %>%
       dplyr::mutate(
         indicator = ind,
-        year = suppressWarnings(as.integer(timePeriodStart)), # Correct column name
+        year = suppressWarnings(as.integer(timePeriodStart)),
         value = suppressWarnings(as.numeric(value)),
         iso3 = countrycode::countrycode(as.numeric(geoAreaCode), "un", "iso3c")
       )
@@ -1114,31 +1152,80 @@ get_unsdg_data <- function(
 
   # Gather data (all countries vs specific)
   results <- if (is.null(areas)) {
-    purrr::map_dfr(indicators, ~ fetch_one(.x, NULL, time_periods))
+    purrr::map_dfr(indicators, ~ fetch_one(.x, NULL))
   } else {
     purrr::map_dfr(indicators, function(ind) {
-      purrr::map_dfr(areas, ~ fetch_one(ind, .x, time_periods))
+      purrr::map_dfr(areas, ~ fetch_one(ind, .x))
     })
   }
 
   if (!nrow(results)) {
+    message("UNSDG API returned no rows for the requested indicators")
     return(results)
   }
 
+  # Filter to requested year range (client-side filtering)
+  results <- results %>%
+    dplyr::filter(!is.na(year), year >= min_year)
+
+  if (!nrow(results)) {
+    message(sprintf("No data found for years >= %d", min_year))
+    return(tibble::tibble())
+  }
+
   # Select and rename columns based on actual API response
+  # Use dplyr::any_of() to handle columns that may not exist
+  available_cols <- names(results)
+
   final_results <- results %>%
+    dplyr::mutate(
+      # Create unit column from attributes.Units if it exists, otherwise NA
+      unit = if ("attributes.Units" %in% available_cols) {
+        .data$attributes.Units
+      } else {
+        NA_character_
+      },
+      # Extract dimension columns (Sex, Age, Location, Reporting Type, etc.)
+      sex = if ("dimensions.Sex" %in% available_cols) {
+        .data$`dimensions.Sex`
+      } else {
+        NA_character_
+      },
+      age = if ("dimensions.Age" %in% available_cols) {
+        .data$`dimensions.Age`
+      } else {
+        NA_character_
+      },
+      location = if ("dimensions.Location" %in% available_cols) {
+        .data$`dimensions.Location`
+      } else {
+        NA_character_
+      },
+      reporting_type = if ("dimensions.Reporting Type" %in% available_cols) {
+        .data$`dimensions.Reporting Type`
+      } else {
+        NA_character_
+      }
+    ) %>%
     dplyr::select(
       indicator,
-      series,
-      seriesDescription,
+      dplyr::any_of(c("series", "seriesDescription")),
       iso3,
       area = geoAreaName,
       year,
       value,
-      unit = attributes.Units,
-      source
+      unit,
+      sex,
+      age,
+      location,
+      reporting_type,
+      dplyr::any_of("source")
     ) %>%
-    dplyr::group_by(indicator, series, iso3) %>%
+    dplyr::group_by(
+      indicator,
+      dplyr::across(dplyr::any_of(c("series", "sex", "age", "location"))),
+      iso3
+    ) %>%
     dplyr::slice_max(order_by = year, n = mrv, with_ties = FALSE) %>%
     dplyr::ungroup() %>%
     dplyr::arrange(indicator, iso3, year)
@@ -1808,7 +1895,7 @@ get_who_data <- function(
   indicators <- unique(indicators)
 
   # ---- internal helper: fetch one indicator ---------------------------------
-  fetch_one_indicator <- function(ind) {
+  fetch_one_indicator <- function(ind, max_retries = 3) {
     base_url <- sprintf("https://ghoapi.azureedge.net/api/%s", ind)
 
     if (!is.null(iso3)) {
@@ -1826,9 +1913,46 @@ get_who_data <- function(
       message("Requesting: ", url)
     }
 
-    resp <- httr2::request(url) |>
-      httr2::req_perform() |>
-      httr2::resp_body_json()
+    # Retry logic with error handling
+    resp <- NULL
+    for (attempt in seq_len(max_retries)) {
+      resp <- tryCatch(
+        {
+          httr2::request(url) |>
+            httr2::req_perform() |>
+            httr2::resp_body_json()
+        },
+        error = function(e) {
+          if (attempt < max_retries) {
+            wait_time <- 2^attempt
+            if (verbose) {
+              message(sprintf(
+                "  Request failed for %s (attempt %d/%d): %s. Retrying in %ds...",
+                ind,
+                attempt,
+                max_retries,
+                conditionMessage(e),
+                wait_time
+              ))
+            }
+            Sys.sleep(wait_time)
+          } else {
+            warning(sprintf(
+              "Failed to fetch WHO data for indicator %s: %s",
+              ind,
+              conditionMessage(e)
+            ))
+          }
+          NULL
+        }
+      )
+      if (!is.null(resp)) break
+    }
+
+    # Return NULL if all retries failed
+    if (is.null(resp)) {
+      return(NULL)
+    }
 
     # WHO returns records under `$value`
     if (is.null(resp$value) || length(resp$value) == 0) {

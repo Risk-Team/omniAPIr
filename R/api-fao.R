@@ -2,37 +2,192 @@
 # FAOSTAT API requires M49 codes for area parameter, even when area_cs=ISO3
 .get_iso3_to_m49_lookup <- function() {
   list(
-    "AFG" = "2", "ALB" = "3", "DZA" = "4", "AND" = "7", "AGO" = "8", "ATG" = "9",
-    "ARG" = "10", "ARM" = "11", "AUS" = "52", "AUT" = "12", "AZE" = "13", "BHS" = "16",
-    "BHR" = "14", "BGD" = "57", "BRB" = "255", "BLR" = "15", "BEL" = "23", "BLZ" = "53",
-    "BEN" = "18", "BTN" = "19", "BOL" = "80", "BIH" = "20", "BWA" = "21", "BRA" = "27",
-    "BRN" = "233", "BGR" = "35", "BFA" = "115", "BDI" = "32", "CPV" = "33", "KHM" = "40",
-    "CMR" = "351", "CAN" = "96", "CAF" = "128", "TCD" = "214", "CHL" = "41", "CHN" = "44",
-    "COL" = "45", "COM" = "46", "COG" = "48", "COK" = "98", "CRI" = "49", "HRV" = "50",
-    "CUB" = "167", "CYP" = "107", "CZE" = "116", "CIV" = "250", "PRK" = "54", "COD" = "72",
-    "DNK" = "56", "DJI" = "58", "DMA" = "59", "DOM" = "60", "ECU" = "63", "EGY" = "209",
-    "SLV" = "238", "GNQ" = "66", "ERI" = "67", "EST" = "68", "SWZ" = "70", "ETH" = "74",
-    "FJI" = "75", "FIN" = "73", "FRA" = "79", "GAB" = "81", "GMB" = "84", "GEO" = "86",
-    "DEU" = "89", "GHA" = "90", "GRC" = "175", "GRD" = "91", "GTM" = "93", "GIN" = "95",
-    "GNB" = "97", "GUY" = "99", "HTI" = "100", "HND" = "101", "HUN" = "102", "ISL" = "103",
-    "IND" = "104", "IDN" = "105", "IRN" = "106", "IRQ" = "109", "IRL" = "112", "ISR" = "108",
-    "ITA" = "114", "JAM" = "83", "JPN" = "118", "JOR" = "113", "KAZ" = "120", "KEN" = "114",
-    "KIR" = "119", "KWT" = "121", "KGZ" = "122", "LAO" = "123", "LVA" = "124", "LBN" = "126",
-    "LSO" = "256", "LBR" = "129", "LBY" = "130", "LTU" = "131", "LUX" = "132", "MDG" = "134",
-    "MWI" = "127", "MYS" = "136", "MDV" = "137", "MLI" = "138", "MLT" = "145", "MRT" = "141",
-    "MUS" = "273", "MEX" = "143", "MNG" = "144", "MNE" = "28", "MAR" = "147", "MOZ" = "148",
-    "MMR" = "149", "NAM" = "150", "NPL" = "153", "NLD" = "156", "NZL" = "157", "NIC" = "158",
-    "NER" = "159", "NGA" = "154", "MKD" = "162", "NOR" = "221", "OMN" = "165", "PAK" = "166",
-    "PAN" = "168", "PNG" = "169", "PRY" = "170", "PER" = "171", "PHL" = "173", "POL" = "174",
-    "PRT" = "179", "QAT" = "117", "KOR" = "146", "MDA" = "183", "ROU" = "185", "RUS" = "184",
-    "RWA" = "188", "KNA" = "189", "LCA" = "191", "VCT" = "244", "WSM" = "193", "STP" = "194",
-    "SAU" = "195", "SEN" = "272", "SRB" = "196", "SYC" = "197", "SLE" = "199", "SGP" = "198",
-    "SVK" = "25", "SVN" = "202", "SLB" = "203", "SOM" = "38", "ZAF" = "207", "SSD" = "210",
-    "ESP" = "211", "LKA" = "212", "SDN" = "208", "SUR" = "216", "SWE" = "176", "CHE" = "219",
-    "SYR" = "220", "TJK" = "222", "THA" = "213", "TLS" = "227", "TGO" = "223", "TON" = "226",
-    "TTO" = "230", "TUN" = "225", "TUR" = "229", "TKM" = "215", "UGA" = "231", "UKR" = "234",
-    "ARE" = "235", "GBR" = "155", "TZA" = "236", "USA" = "237", "URY" = "249", "UZB" = "251",
-    "VUT" = "242", "VEN" = "254", "VNM" = "251", "YEM" = "181", "ZMB" = "251", "ZWE" = "181"
+    "AFG" = "2",
+    "ALB" = "3",
+    "DZA" = "4",
+    "AND" = "7",
+    "AGO" = "8",
+    "ATG" = "9",
+    "ARG" = "10",
+    "ARM" = "11",
+    "AUS" = "52",
+    "AUT" = "12",
+    "AZE" = "13",
+    "BHS" = "16",
+    "BHR" = "14",
+    "BGD" = "57",
+    "BRB" = "255",
+    "BLR" = "15",
+    "BEL" = "23",
+    "BLZ" = "53",
+    "BEN" = "18",
+    "BTN" = "19",
+    "BOL" = "80",
+    "BIH" = "20",
+    "BWA" = "21",
+    "BRA" = "27",
+    "BRN" = "233",
+    "BGR" = "35",
+    "BFA" = "115",
+    "BDI" = "32",
+    "CPV" = "33",
+    "KHM" = "40",
+    "CMR" = "351",
+    "CAN" = "96",
+    "CAF" = "128",
+    "TCD" = "214",
+    "CHL" = "41",
+    "CHN" = "44",
+    "COL" = "45",
+    "COM" = "46",
+    "COG" = "48",
+    "COK" = "98",
+    "CRI" = "49",
+    "HRV" = "50",
+    "CUB" = "167",
+    "CYP" = "107",
+    "CZE" = "116",
+    "CIV" = "250",
+    "PRK" = "54",
+    "COD" = "72",
+    "DNK" = "56",
+    "DJI" = "58",
+    "DMA" = "59",
+    "DOM" = "60",
+    "ECU" = "63",
+    "EGY" = "209",
+    "SLV" = "238",
+    "GNQ" = "66",
+    "ERI" = "67",
+    "EST" = "68",
+    "SWZ" = "70",
+    "ETH" = "74",
+    "FJI" = "75",
+    "FIN" = "73",
+    "FRA" = "79",
+    "GAB" = "81",
+    "GMB" = "84",
+    "GEO" = "86",
+    "DEU" = "89",
+    "GHA" = "90",
+    "GRC" = "175",
+    "GRD" = "91",
+    "GTM" = "93",
+    "GIN" = "95",
+    "GNB" = "97",
+    "GUY" = "99",
+    "HTI" = "100",
+    "HND" = "101",
+    "HUN" = "102",
+    "ISL" = "103",
+    "IND" = "104",
+    "IDN" = "105",
+    "IRN" = "106",
+    "IRQ" = "109",
+    "IRL" = "112",
+    "ISR" = "108",
+    "ITA" = "114",
+    "JAM" = "83",
+    "JPN" = "118",
+    "JOR" = "113",
+    "KAZ" = "120",
+    "KEN" = "114",
+    "KIR" = "119",
+    "KWT" = "121",
+    "KGZ" = "122",
+    "LAO" = "123",
+    "LVA" = "124",
+    "LBN" = "126",
+    "LSO" = "256",
+    "LBR" = "129",
+    "LBY" = "130",
+    "LTU" = "131",
+    "LUX" = "132",
+    "MDG" = "134",
+    "MWI" = "127",
+    "MYS" = "136",
+    "MDV" = "137",
+    "MLI" = "138",
+    "MLT" = "145",
+    "MRT" = "141",
+    "MUS" = "273",
+    "MEX" = "143",
+    "MNG" = "144",
+    "MNE" = "28",
+    "MAR" = "147",
+    "MOZ" = "148",
+    "MMR" = "149",
+    "NAM" = "150",
+    "NPL" = "153",
+    "NLD" = "156",
+    "NZL" = "157",
+    "NIC" = "158",
+    "NER" = "159",
+    "NGA" = "154",
+    "MKD" = "162",
+    "NOR" = "221",
+    "OMN" = "165",
+    "PAK" = "166",
+    "PAN" = "168",
+    "PNG" = "169",
+    "PRY" = "170",
+    "PER" = "171",
+    "PHL" = "173",
+    "POL" = "174",
+    "PRT" = "179",
+    "QAT" = "117",
+    "KOR" = "146",
+    "MDA" = "183",
+    "ROU" = "185",
+    "RUS" = "184",
+    "RWA" = "188",
+    "KNA" = "189",
+    "LCA" = "191",
+    "VCT" = "244",
+    "WSM" = "193",
+    "STP" = "194",
+    "SAU" = "195",
+    "SEN" = "272",
+    "SRB" = "196",
+    "SYC" = "197",
+    "SLE" = "199",
+    "SGP" = "198",
+    "SVK" = "25",
+    "SVN" = "202",
+    "SLB" = "203",
+    "SOM" = "38",
+    "ZAF" = "207",
+    "SSD" = "210",
+    "ESP" = "211",
+    "LKA" = "212",
+    "SDN" = "208",
+    "SUR" = "216",
+    "SWE" = "176",
+    "CHE" = "219",
+    "SYR" = "220",
+    "TJK" = "222",
+    "THA" = "213",
+    "TLS" = "227",
+    "TGO" = "223",
+    "TON" = "226",
+    "TTO" = "230",
+    "TUN" = "225",
+    "TUR" = "229",
+    "TKM" = "215",
+    "UGA" = "231",
+    "UKR" = "234",
+    "ARE" = "235",
+    "GBR" = "155",
+    "TZA" = "236",
+    "USA" = "237",
+    "URY" = "249",
+    "UZB" = "251",
+    "VUT" = "242",
+    "VEN" = "254",
+    "VNM" = "251",
+    "YEM" = "181",
+    "ZMB" = "251",
+    "ZWE" = "181"
   )
 }
 
@@ -95,8 +250,9 @@
 #'   \item \strong{Land use (Element 7209):} agricultural_land, forest_land
 #'   \item \strong{Food Balance Sheets (Elements 664, 674):} grand_total, total (Item aggregated: Grand Total, code 2901)
 #'   \item \strong{Food Balance Sheets (Element 645):} cereals, starchy_roots, pulses, treenuts, vegetables, fruits, eggs, meat, fish, vegetable_oils (aggregated food groups)
-#'   \item \strong{Food Security (Element 6120 - FS database):} cereals_roots_tubers, dietary_energy_cereals, share_cereals (3-year averages)
+#'   \item \strong{Food Security SDG indicators (Element 6120 - FS database):} undernourishment/pou/sdg_2_1_1 (SDG 2.1.1), food_insecurity/fies/sdg_2_1_2 (SDG 2.1.2), cereals_roots_tubers (3-year averages)
 #'   \item \strong{CAHD Cost Indicators (Element 6120 - CAHD database):} healthy_diet, starchy_staples, animal_source_food, vegetables, fruits (cost in PPP$/person/day)
+#'   \item \strong{CAHD Affordability Indicators (Element 6120 - CAHD database):} people_unable_afford/nua_millions (millions), percent_unable_afford/pua_percent (%)
 #' }
 #'
 #' **Limitations:**
@@ -186,14 +342,56 @@
 #'   mrv = 20
 #' )
 #'
-#' # Get Cost and Affordability of a Healthy Diet (CAHD) data
-#' cahd_data <- get_faostat_data(
+#' # Get SDG 2.1.1 - Prevalence of undernourishment (%)
+#' pou_data <- get_faostat_data(
+#'   element = "6120",
+#'   item = "undernourishment",  # or "pou" or "sdg_2_1_1"
+#'   database = "FS",
+#'   iso3 = "KEN",
+#'   mrv = 20
+#' )
+#'
+#' # Get SDG 2.1.2 - Prevalence of moderate or severe food insecurity (%)
+#' fies_data <- get_faostat_data(
+#'   element = "6120",
+#'   item = "food_insecurity",  # or "fies" or "sdg_2_1_2"
+#'   database = "FS",
+#'   iso3 = "KEN",
+#'   mrv = 20
+#' )
+#'
+#' # Get both SDG food security indicators together
+#' sdg_food <- get_faostat_data(
+#'   element = "6120",
+#'   item = c("undernourishment", "food_insecurity"),
+#'   database = "FS",
+#'   iso3 = "KEN"
+#' )
+#'
+#' # Get Cost and Affordability of a Healthy Diet (CAHD) data - cost indicators
+#' cahd_cost <- get_faostat_data(
 #'   element = "6120",
 #'   item = c("healthy_diet", "starchy_staples", "animal_source_food", "vegetables", "fruits"),
 #'   database = "CAHD",
 #'   iso3 = "KEN",
-#'   release = "7S2025", # July 2025 release
 #'   mrv = 10
+#' )
+#'
+#' # Get CAHD affordability indicators - number and percent unable to afford
+#' cahd_afford <- get_faostat_data(
+#'   element = "6120",
+#'   item = c("people_unable_afford", "percent_unable_afford"),
+#'   database = "CAHD",
+#'   iso3 = "KEN",
+#'   mrv = 10
+#' )
+#'
+#' # Get all CAHD indicators for a country
+#' cahd_all <- get_faostat_data(
+#'   element = "6120",
+#'   item = c("healthy_diet", "people_unable_afford", "percent_unable_afford"),
+#'   database = "CAHD",
+#'   iso3 = "KEN"
 #' )
 #' }
 get_faostat_data <- function(
@@ -219,10 +417,10 @@ get_faostat_data <- function(
   if (is.null(item_cs) && !is.null(database) && toupper(database) == "FBS") {
     item_cs <- "FBS"
   }
-  
-  # Auto-set release for CAHD database if not specified (use latest July 2025 release)
+
+  # Auto-set release for CAHD database if not specified (use latest December 2024 release)
   if (is.null(release) && !is.null(database) && toupper(database) == "CAHD") {
-    release <- "7S2025"
+    release <- "12U2024"
     if (verbose) {
       message(sprintf("Using CAHD release: %s", release))
     }
@@ -231,7 +429,7 @@ get_faostat_data <- function(
   # ISO3 to M49 code lookup table (defined once, outside inner function)
   # FAOSTAT API requires M49 codes for area parameter, even when area_cs=ISO3
   iso3_to_m49 <- .get_iso3_to_m49_lookup()
-  
+
   # Item lookup tables (defined once, outside inner function)
   animal_lookup <- list(
     "cattle" = "866",
@@ -304,6 +502,16 @@ get_faostat_data <- function(
   )
 
   fs_lookup <- list(
+    # SDG indicators
+    "undernourishment" = "21004",
+    "pou" = "21004",
+    "sdg_2_1_1" = "21004",
+    "prevalence_undernourishment" = "21004",
+    "food_insecurity" = "21009",
+    "moderate_severe_food_insecurity" = "21009",
+    "sdg_2_1_2" = "21009",
+    "fies" = "21009",
+    # Dietary energy indicators
     "cereals_roots_tubers" = "21012",
     "dietary_energy_cereals" = "21012",
     "share_cereals" = "21012"
@@ -311,7 +519,9 @@ get_faostat_data <- function(
 
   # CAHD (Cost and Affordability of a Healthy Diet) lookup - Element 6120
   # Cost indicators in PPP dollars per person per day
+  # Affordability indicators (NUA = Number Unable to Afford, PUA = Percent Unable to Afford)
   cahd_lookup <- list(
+    # Cost indicators (PPP$/person/day)
     "healthy_diet" = "7008",
     "cost_healthy_diet" = "7008",
     "starchy_staples" = "7011",
@@ -321,7 +531,14 @@ get_faostat_data <- function(
     "vegetables" = "7010",
     "cost_vegetables" = "7010",
     "fruits" = "7004",
-    "cost_fruits" = "7004"
+    "cost_fruits" = "7004",
+    # Affordability indicators
+    "people_unable_afford" = "7006",
+    "nua_millions" = "7006",
+    "number_unable_afford" = "7006",
+    "percent_unable_afford" = "7005",
+    "pua_percent" = "7005",
+    "share_unable_afford" = "7005"
   )
 
   # Helper function to try fetching data with specific years
@@ -332,11 +549,15 @@ get_faostat_data <- function(
       # Handle multiple elements (comma-separated) by checking if any match
       element_str <- as.character(element)
       element_codes <- base::trimws(base::strsplit(element_str, ",")[[1]])
-      
+
       lookup_table <- NULL
       for (elem_code in element_codes) {
         # Check database to distinguish between FS and CAHD (both use element 6120)
-        if (elem_code == "6120" && !is.null(database) && toupper(database) == "CAHD") {
+        if (
+          elem_code == "6120" &&
+            !is.null(database) &&
+            toupper(database) == "CAHD"
+        ) {
           temp_table <- cahd_lookup # CAHD cost indicators
         } else {
           temp_table <- switch(
@@ -404,8 +625,12 @@ get_faostat_data <- function(
     # "4021" # NPK fertilizers
     # "2901" # Grand Total + (Total) - FBS
     # "2905,2949,2960,2919,2943,2911,2907,2912,2914,2918" # FBS Food groups (kg/capita/year)
-    # "21012" # Share of dietary energy from cereals, roots, and tubers (%) - FS
+    # "21004" # FS: Prevalence of undernourishment (SDG 2.1.1) (%) - 3-year average
+    # "21009" # FS: Prevalence of moderate or severe food insecurity (SDG 2.1.2) (%) - 3-year average
+    # "21012" # FS: Share of dietary energy from cereals, roots, and tubers (%) - 3-year average
     # "7008,7011,7007,7010,7004" # CAHD cost indicators (healthy diet, starchy staples, animal food, vegetables, fruits)
+    # "7006" # CAHD: Number of people unable to afford a healthy diet (NUA), millions
+    # "7005" # CAHD: Percent of population unable to afford a healthy diet (PUA), %
     base <- paste0("https://faostatservices.fao.org/api/v1/en/data/", database)
 
     # Set area parameter based on whether iso3 is specified
@@ -439,17 +664,17 @@ get_faostat_data <- function(
       year_param_name <- "year"
       year_param_value <- paste(years_to_try, collapse = ",")
     }
-    
+
     params <- list(
       area = area_param,
       area_cs = "ISO3",
       element = element, #What kind of measurement/statistic you want (e.g., production, area harvested, yield, etc.)
       item = item #What specific products/crops/commodities you want data for (e.g., wheat, maize, rice, etc.)
     )
-    
+
     # Add year parameter with appropriate name
     params[[year_param_name]] <- year_param_value
-    
+
     # Add remaining parameters
     params$show_codes <- "true"
     params$show_unit <- "true"
@@ -462,7 +687,7 @@ get_faostat_data <- function(
     if (!is.null(item_cs)) {
       params$item_cs <- item_cs
     }
-    
+
     # Add release parameter for CAHD database
     if (!is.null(release)) {
       params$release <- release
@@ -478,7 +703,7 @@ get_faostat_data <- function(
 
     # Build the full URL
     url <- paste0(base, "?", qs)
-    
+
     if (verbose) {
       message(sprintf("API URL: %s", url))
       message(sprintf("Item code(s): %s", item))
@@ -559,8 +784,26 @@ get_faostat_data <- function(
                     .x %in% c("Flag", "flag") ~ "flag",
                     TRUE ~ .x
                   )
-                ) %>%
-                dplyr::filter(year %in% years_to_try) %>%
+                )
+
+              # Handle FS database special year format (e.g., "2014-2016" -> 2014)
+              # FS database returns 3-year average periods like "2014-2016"
+              if (!is.null(database) && toupper(database) == "FS") {
+                # Extract start year from year range (e.g., "2014-2016" -> 2014)
+                faostat_data <- faostat_data %>%
+                  dplyr::mutate(
+                    year_start = as.numeric(sub("-.*", "", year)),
+                    year = year_start
+                  ) %>%
+                  dplyr::filter(year %in% years_to_try) %>%
+                  dplyr::select(-year_start)
+              } else {
+                # Standard year filtering for other databases
+                faostat_data <- faostat_data %>%
+                  dplyr::filter(year %in% years_to_try)
+              }
+
+              faostat_data <- faostat_data %>%
                 dplyr::mutate(
                   value = as.numeric(value),
                   year = as.numeric(year)
@@ -637,21 +880,21 @@ get_faostat_data <- function(
     # Try progressively expanded year ranges to find available data
     # Including more granular recent ranges for better data discovery
     year_ranges <- list(
-      (current_year - 5):current_year,   # Last 5 years (2020-2025)
-      (current_year - 10):current_year,  # Last 10 years (2015-2025)
-      2010:2023,                         # FBS exact data range (2010-2023)
-      (current_year - 15):current_year,  # Last 15 years (2010-2025)
-      (current_year - 20):current_year,  # Last 20 years (2005-2025)
-      (current_year - 25):current_year,  # Last 25 years (2000-2025)
-      (current_year - 30):current_year,  # Last 30 years (1995-2025)
-      (current_year - 35):current_year,  # Last 35 years (1990-2025)
-      1990:current_year,                 # Since 1990
-      1985:current_year,                 # Since 1985
-      1980:current_year,                 # Since 1980
-      1975:current_year,                 # Since 1975
-      1970:current_year,                 # Since 1970
-      1965:current_year,                 # Since 1965
-      1961:current_year                  # All available years since FAOSTAT start
+      (current_year - 5):current_year, # Last 5 years (2020-2025)
+      (current_year - 10):current_year, # Last 10 years (2015-2025)
+      2010:2023, # FBS exact data range (2010-2023)
+      (current_year - 15):current_year, # Last 15 years (2010-2025)
+      (current_year - 20):current_year, # Last 20 years (2005-2025)
+      (current_year - 25):current_year, # Last 25 years (2000-2025)
+      (current_year - 30):current_year, # Last 30 years (1995-2025)
+      (current_year - 35):current_year, # Last 35 years (1990-2025)
+      1990:current_year, # Since 1990
+      1985:current_year, # Since 1985
+      1980:current_year, # Since 1980
+      1975:current_year, # Since 1975
+      1970:current_year, # Since 1970
+      1965:current_year, # Since 1965
+      1961:current_year # All available years since FAOSTAT start
     )
 
     for (year_range in year_ranges) {
