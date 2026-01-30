@@ -441,6 +441,31 @@ get_invasive_alien_species <- function(
     ))
   }
 
+  .country_name_candidates <- function(name) {
+    if (is.na(name) || !nzchar(name)) {
+      return(character())
+    }
+    alt <- character()
+    if (stringr::str_detect(name, "^Saint\\s")) {
+      alt <- c(
+        alt,
+        stringr::str_replace(name, "^Saint\\s", "St. "),
+        stringr::str_replace(name, "^Saint\\s", "St ")
+      )
+    }
+    if (stringr::str_detect(name, "^St\\.?\\s")) {
+      alt <- c(alt, stringr::str_replace(name, "^St\\.?\\s", "Saint "))
+    }
+    alt <- c(alt, stringr::str_replace_all(name, "\\.", ""))
+    unique(c(name, alt))
+  }
+
+  .normalize_country_key <- function(x) {
+    x <- stringi::stri_trans_general(x, "Latin-ASCII")
+    x <- stringr::str_to_lower(x)
+    stringr::str_replace_all(x, "[^a-z0-9]", "")
+  }
+
   # --- 1) Find GRIIS dataset on GBIF (country checklist) with retry logic ---
   if (verbose) {
     message("Searching for GRIIS dataset on GBIF...")
@@ -453,14 +478,9 @@ get_invasive_alien_species <- function(
   while (retry_attempt <= max_retries && !success) {
     tryCatch(
       {
-        ds <- rgbif::dataset_search(
-          q = paste(
-            "Global Register of Introduced and Invasive Species",
-            country_name
-          ),
-          type = "CHECKLIST",
-          limit = 100
-        )$data
+        ds <- rgbif::dataset_export(
+          projectId = "GRIIS"
+        )
         success <- TRUE
       },
       error = function(e) {
@@ -492,24 +512,52 @@ get_invasive_alien_species <- function(
   }
 
   if (is.null(ds) || !nrow(ds)) {
-    stop("No GRIIS dataset found for: ", country_name, call. = FALSE)
+    warning("No GRIIS dataset found for: ", country_name, call. = FALSE)
+    return(NULL)
   }
-  griis_key <- ds$datasetKey[
-    stringr::str_detect(
-      ds$title,
-      stringr::regex(
-        "^Global Register of Introduced and Invasive Species",
-        ignore_case = TRUE
-      )
-    ) &
+
+  griis_rows <- ds %>%
+    dplyr::filter(
       stringr::str_detect(
-        ds$title,
-        stringr::regex(country_name, ignore_case = TRUE)
+        title,
+        stringr::regex(
+          "^Global Register of Introduced and Invasive Species",
+          ignore_case = TRUE
+        )
       )
+    )
+  if (is.null(griis_rows) || !nrow(griis_rows)) {
+    warning("No GRIIS dataset found for: ", country_name, call. = FALSE)
+    return(NULL)
+  }
+
+  candidates <- .country_name_candidates(country_name)
+  title_norm <- .normalize_country_key(griis_rows$title)
+  cand_norm <- unique(.normalize_country_key(candidates))
+  pattern <- paste(cand_norm, collapse = "|")
+
+  griis_key <- griis_rows$datasetKey[
+    stringr::str_detect(title_norm, pattern)
   ][1]
 
   if (is.na(griis_key)) {
-    stop("No GRIIS dataset key found for: ", country_name, call. = FALSE)
+    guess <- dplyr::tibble(
+      title = griis_rows$title,
+      title_norm = title_norm,
+      score = adist(.normalize_country_key(country_name), title_norm)
+    ) %>%
+      dplyr::arrange(score) %>%
+      dplyr::slice_head(n = 5)
+    suggestions <- paste(guess$title, collapse = "; ")
+    warning(
+      sprintf(
+        "No GRIIS dataset key found for: %s. Closest matches: %s",
+        country_name,
+        suggestions
+      ),
+      call. = FALSE
+    )
+    return(NULL)
   }
 
   if (verbose) {
