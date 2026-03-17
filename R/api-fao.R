@@ -191,6 +191,71 @@
   )
 }
 
+# Environment to cache the FAOSTAT guest token
+.faostat_token_cache <- new.env(parent = emptyenv())
+.faostat_token_cache$token <- NULL
+.faostat_token_cache$expires_at <- NULL
+
+#' Fetch a guest token for the FAOSTAT API
+#' @return Character. A valid Bearer token string.
+#' @keywords internal
+.get_faostat_token <- function(verbose = FALSE) {
+  # Return cached token if still valid (with 60s buffer)
+  if (!is.null(.faostat_token_cache$token) &&
+      !is.null(.faostat_token_cache$expires_at) &&
+      Sys.time() < .faostat_token_cache$expires_at) {
+    if (verbose) message("Using cached FAOSTAT guest token")
+    return(.faostat_token_cache$token)
+  }
+
+  if (verbose) message("Fetching new FAOSTAT guest token...")
+
+  token <- NULL
+  for (attempt in 1:3) {
+    tryCatch({
+      resp <- httr2::request("https://faostatservices.fao.org/api/v1/auth/guest") |>
+        httr2::req_headers(
+          Accept = "application/json, text/javascript, */*; q=0.01",
+          Origin = "https://www.fao.org",
+          Referer = "https://www.fao.org/",
+          `User-Agent` = "Mozilla/5.0"
+        ) |>
+        httr2::req_perform()
+      body <- httr2::resp_body_json(resp)
+      token <- body$token
+      break
+    }, error = function(e) {
+      if (attempt < 3) {
+        if (verbose) message(sprintf("Token request failed (attempt %d/3), retrying in %ds...", attempt, 2^attempt))
+        Sys.sleep(2^attempt)
+      }
+    })
+  }
+
+  if (is.null(token) || token == "") {
+    stop("Failed to obtain FAOSTAT guest token after 3 attempts. The FAOSTAT API may be temporarily unavailable.")
+  }
+
+  # Decode expiry from JWT payload (middle segment)
+  parts <- strsplit(token, "\\.")[[1]]
+  payload_b64 <- parts[2]
+  # Add base64 padding if needed
+  pad <- nchar(payload_b64) %% 4
+  if (pad > 0) payload_b64 <- paste0(payload_b64, strrep("=", 4 - pad))
+  payload <- jsonlite::fromJSON(rawToChar(jsonlite::base64_dec(payload_b64)))
+  exp_time <- as.POSIXct(payload$exp, origin = "1970-01-01", tz = "UTC")
+
+  # Cache with 60-second safety buffer
+  .faostat_token_cache$token <- token
+  .faostat_token_cache$expires_at <- exp_time - 60
+
+  if (verbose) {
+    message(sprintf("FAOSTAT token cached, expires at %s UTC", format(exp_time, "%H:%M:%S")))
+  }
+
+  token
+}
+
 #' Get FAOSTAT Agriculture Data
 #'
 #' @description
@@ -682,6 +747,7 @@ get_faostat_data <- function(
     params$show_notes <- "true"
     params$null_values <- "false"
     params$output_type <- "csv"
+    params$caching <- "false"
 
     # Add item_cs only if specified (some databases don't use it)
     if (!is.null(item_cs)) {
@@ -710,6 +776,9 @@ get_faostat_data <- function(
       message(sprintf("Element code(s): %s", element))
     }
 
+    # Get guest auth token
+    token <- .get_faostat_token(verbose = verbose)
+
     # Fetch and parse the data with retry logic
     retry_attempt <- 1
     success <- FALSE
@@ -719,10 +788,23 @@ get_faostat_data <- function(
       tryCatch(
         {
           response <- httr2::request(url) |>
+            httr2::req_headers(
+              Authorization = paste("Bearer", token),
+              Origin = "https://www.fao.org",
+              Referer = "https://www.fao.org/",
+              `User-Agent` = "Mozilla/5.0"
+            ) |>
             httr2::req_perform()
           success <- TRUE
         },
         error = function(e) {
+          # On auth errors, invalidate cache and get a fresh token
+          if (grepl("401|403|Unauthorized|Forbidden", conditionMessage(e))) {
+            .faostat_token_cache$token <- NULL
+            .faostat_token_cache$expires_at <- NULL
+            token <<- .get_faostat_token(verbose = verbose)
+            if (verbose) message("Token expired, refreshed and retrying...")
+          }
           if (retry_attempt < max_retries) {
             wait_time <- 2^retry_attempt
             if (verbose) {
