@@ -128,8 +128,18 @@ get_acled_data <- function(
   )
   # ---- Build request with pagination ---------------------------------------
   base_url <- "https://acleddata.com/api/acled/read?_format=json"
-  # OAuth password grant; client_id is "acled"
   token_url <- "https://acleddata.com/oauth/token"
+  # Fetch a fresh bearer token (avoids httr2 in-memory cache returning stale tokens)
+  token_resp <- httr2::request(token_url) %>%
+    httr2::req_body_form(
+      username   = email.address,
+      password   = password,
+      grant_type = "password",
+      client_id  = "acled"
+    ) %>%
+    httr2::req_perform() %>%
+    httr2::resp_body_json()
+  access_token <- token_resp$access_token
   # Set limit to API maximum (5000 rows per page)
   page_limit <- 5000
   params$limit <- page_limit
@@ -158,13 +168,9 @@ get_acled_data <- function(
     while (retry_attempt <= max_retries && !success) {
       tryCatch(
         {
-          # Build and execute request
+          # Build and execute request using the explicit bearer token
           req <- httr2::request(base_url) %>%
-            httr2::req_oauth_password(
-              client = httr2::oauth_client("acled", token_url),
-              username = email.address,
-              password = password
-            ) %>%
+            httr2::req_auth_bearer_token(access_token) %>%
             httr2::req_url_query(!!!params)
 
           resp <- httr2::req_perform(req)
