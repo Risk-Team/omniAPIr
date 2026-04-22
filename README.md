@@ -125,6 +125,15 @@ acled_data <- get_acled_data(
   start.date = "2023-01-01",
   end.date = "2023-12-31"
 )
+
+# If your ACLED account can log in but the endpoint rejects OAuth,
+# force the documented cookie-auth flow:
+acled_data <- get_acled_data(
+  email.address = "your.email@example.com",
+  password = "your_password",
+  country = "Kenya",
+  auth_method = "cookie"
+)
 ```
 
 ### ILO - Labor Statistics

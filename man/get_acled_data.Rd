@@ -11,6 +11,7 @@ get_acled_data(
   iso = NULL,
   start.date = NULL,
   end.date = NULL,
+  auth_method = c("auto", "oauth", "cookie"),
   verbose = FALSE,
   max_retries = 3
 )
@@ -30,6 +31,11 @@ Default is NULL.}
 
 \item{end.date}{Character. End date in "YYYY-MM-DD" format. Default is NULL.}
 
+\item{auth_method}{Character. Authentication mode: \code{"auto"} (default),
+\code{"oauth"}, or \code{"cookie"}. \code{"auto"} tries OAuth first and falls
+back to ACLED's cookie-auth flow if the endpoint rejects the OAuth token with
+the known permission error.}
+
 \item{verbose}{Logical. If TRUE, prints detailed progress messages. Default is FALSE.}
 
 \item{max_retries}{Integer. Maximum number of retry attempts for failed requests.
@@ -48,8 +54,9 @@ ISO code, and date range.
 API Documentation: \url{https://apidocs.acleddata.com/}
 
 The function automatically handles pagination (5000 rows per page) and retrieves
-all available data matching the filters. Authentication is required via OAuth
-password grant using your ACLED credentials.
+all available data matching the filters. By default it tries OAuth password
+grant first, then falls back to ACLED's documented cookie-auth flow when the
+endpoint rejects an otherwise valid OAuth token with the known permission error.
 
 If both start.date and end.date are provided, the function filters events
 within that date range. If only country or iso is provided, all events for
@@ -79,6 +86,14 @@ acled_data <- get_acled_data(
   password = "your_password",
   country = "Kenya",
   verbose = TRUE
+)
+
+# Force cookie auth if your ACLED account cannot read via OAuth
+acled_data <- get_acled_data(
+  email.address = "your.email@example.com",
+  password = "your_password",
+  country = "Kenya",
+  auth_method = "cookie"
 )
 }
 }

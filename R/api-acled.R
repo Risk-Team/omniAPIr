@@ -15,6 +15,10 @@
 #'   Default is NULL.
 #' @param start.date Character. Start date in "YYYY-MM-DD" format. Default is NULL.
 #' @param end.date Character. End date in "YYYY-MM-DD" format. Default is NULL.
+#' @param auth_method Character. Authentication mode: `"auto"` (default),
+#'   `"oauth"`, or `"cookie"`. `"auto"` tries OAuth first and falls back to
+#'   ACLED's cookie-auth flow if the endpoint rejects the OAuth token with the
+#'   known permission error.
 #' @param verbose Logical. If TRUE, prints detailed progress messages. Default is FALSE.
 #' @param max_retries Integer. Maximum number of retry attempts for failed requests.
 #'   Default is 3.
@@ -26,8 +30,9 @@
 #' API Documentation: \url{https://apidocs.acleddata.com/}
 #'
 #' The function automatically handles pagination (5000 rows per page) and retrieves
-#' all available data matching the filters. Authentication is required via OAuth
-#' password grant using your ACLED credentials.
+#' all available data matching the filters. By default it tries OAuth password
+#' grant first, then falls back to ACLED's documented cookie-auth flow when the
+#' endpoint rejects an otherwise valid OAuth token with the known permission error.
 #'
 #' If both start.date and end.date are provided, the function filters events
 #' within that date range. If only country or iso is provided, all events for
@@ -60,6 +65,14 @@
 #'   country = "Kenya",
 #'   verbose = TRUE
 #' )
+#'
+#' # Force cookie auth if your ACLED account cannot read via OAuth
+#' acled_data <- get_acled_data(
+#'   email.address = "your.email@example.com",
+#'   password = "your_password",
+#'   country = "Kenya",
+#'   auth_method = "cookie"
+#' )
 #' }
 
 
@@ -70,10 +83,13 @@ get_acled_data <- function(
   iso = NULL, # numeric vector of ISO codes (e.g. 404 for Kenya)
   start.date = NULL, # "YYYY-MM-DD"
   end.date = NULL, # "YYYY-MM-DD"
+  auth_method = c("auto", "oauth", "cookie"),
   verbose = FALSE, # print detailed progress messages
   max_retries = 3 # maximum retry attempts
 ) {
   # ---- Validate basics ----------------------------------------------------
+  auth_method <- match.arg(auth_method)
+
   if (!is.null(start.date) || !is.null(end.date)) {
     if (is.null(start.date) || is.null(end.date)) {
       stop("Supply both start.date and end.date, or neither.", call. = FALSE)
@@ -126,35 +142,76 @@ get_acled_data <- function(
     ),
     collapse = "|"
   )
-  # ---- Build request with pagination ---------------------------------------
+
   base_url <- "https://acleddata.com/api/acled/read?_format=json"
-  token_url <- "https://acleddata.com/oauth/token"
-  # Fetch a fresh bearer token (avoids httr2 in-memory cache returning stale tokens)
-  token_resp <- httr2::request(token_url) %>%
-    httr2::req_body_form(
-      username   = email.address,
-      password   = password,
-      grant_type = "password",
-      client_id  = "acled"
-    ) %>%
-    httr2::req_perform() %>%
-    httr2::resp_body_json()
-  access_token <- token_resp$access_token
-  # Set limit to API maximum (5000 rows per page)
+
+  is_known_oauth_permission_error <- function(message_text) {
+    grepl("HTTP 403 Forbidden", message_text, fixed = TRUE) ||
+      grepl("restful get acled_api_endpoint", message_text, fixed = TRUE)
+  }
+
+  fetch_acled_oauth_token <- function() {
+    httr2::request("https://acleddata.com/oauth/token") %>%
+      httr2::req_body_form(
+        username = email.address,
+        password = password,
+        grant_type = "password",
+        client_id = "acled"
+      ) %>%
+      httr2::req_perform() %>%
+      httr2::resp_body_json()
+  }
+
+  perform_cookie_login <- function() {
+    cookie_jar <- tempfile(fileext = ".txt")
+    login_resp <- httr2::request("https://acleddata.com/user/login?_format=json") %>%
+      httr2::req_headers(`Content-Type` = "application/json") %>%
+      httr2::req_body_json(list(name = email.address, pass = password)) %>%
+      httr2::req_cookie_preserve(path = cookie_jar) %>%
+      httr2::req_error(is_error = function(resp) FALSE) %>%
+      httr2::req_perform()
+
+    if (httr2::resp_status(login_resp) >= 400) {
+      stop(
+        sprintf(
+          "ACLED cookie login failed with HTTP %s.",
+          httr2::resp_status(login_resp)
+        ),
+        call. = FALSE
+      )
+    }
+
+    cookie_jar
+  }
+
+  auth_state <- list(
+    mode = auth_method,
+    access_token = NULL,
+    cookie_jar = NULL
+  )
+
+  if (auth_method %in% c("auto", "oauth")) {
+    token_resp <- fetch_acled_oauth_token()
+    auth_state$mode <- "oauth"
+    auth_state$access_token <- token_resp$access_token
+  } else {
+    auth_state$mode <- "cookie"
+    auth_state$cookie_jar <- perform_cookie_login()
+  }
+
   page_limit <- 5000
   params$limit <- page_limit
-  # Initialize pagination variables
   all_data <- list()
   page <- 1
   total_fetched <- 0
-  # ---- Pagination loop with retry logic ------------------------------------
+
   repeat {
-    # Calculate page number for offset-based pagination
     params$page <- page
 
     if (verbose) {
       message(sprintf(
-        "Fetching ACLED data - page %d (limit: %d)...",
+        "Fetching ACLED data via %s auth - page %d (limit: %d)...",
+        auth_state$mode,
         page,
         page_limit
       ))
@@ -168,12 +225,45 @@ get_acled_data <- function(
     while (retry_attempt <= max_retries && !success) {
       tryCatch(
         {
-          # Build and execute request using the explicit bearer token
           req <- httr2::request(base_url) %>%
-            httr2::req_auth_bearer_token(access_token) %>%
             httr2::req_url_query(!!!params)
 
+          if (identical(auth_state$mode, "oauth")) {
+            req <- req %>%
+              httr2::req_auth_bearer_token(auth_state$access_token)
+          } else {
+            req <- req %>%
+              httr2::req_cookie_preserve(path = auth_state$cookie_jar) %>%
+              httr2::req_error(is_error = function(resp) FALSE)
+          }
+
           resp <- httr2::req_perform(req)
+
+          if (identical(auth_state$mode, "oauth") && httr2::resp_status(resp) == 403) {
+            out_403 <- httr2::resp_body_json(resp, simplifyVector = TRUE)
+            message_403 <- paste(
+              c(
+                if (!is.null(out_403$message)) out_403$message else NULL,
+                if (!is.null(out_403$messages)) out_403$messages else NULL
+              ),
+              collapse = "; "
+            )
+
+            if (
+              identical(auth_method, "auto") &&
+                is_known_oauth_permission_error(message_403)
+            ) {
+              if (verbose) {
+                message(
+                  "ACLED endpoint rejected OAuth token with permission error; switching to cookie authentication."
+                )
+              }
+              auth_state$mode <- "cookie"
+              auth_state$cookie_jar <- perform_cookie_login()
+              return(NULL)
+            }
+          }
+
           success <- TRUE
         },
         error = function(e) {
@@ -204,26 +294,28 @@ get_acled_data <- function(
       )
     }
 
-    # ---- Parse response ---------------------------------------------------
     out <- httr2::resp_body_json(resp, simplifyVector = TRUE)
 
-    # Check for API errors
-    if (!is.null(out$status) && out$status != 200) {
-      error_msg <- if (!is.null(out$message)) out$message else "unknown error"
+    if (httr2::resp_status(resp) >= 400 || (!is.null(out$status) && out$status != 200)) {
+      error_msg <- if (!is.null(out$message) && nzchar(out$message)) {
+        out$message
+      } else if (!is.null(out$messages) && length(out$messages) > 0) {
+        paste(out$messages, collapse = "; ")
+      } else {
+        "unknown error"
+      }
       stop(
         sprintf(
           "ACLED API error %s: %s",
-          out$status,
+          httr2::resp_status(resp),
           error_msg
         ),
         call. = FALSE
       )
     }
 
-    # Extract data from current page
     page_data <- out$data
 
-    # If no data returned, we've reached the end
     if (
       is.null(page_data) || length(page_data) == 0L || nrow(page_data) == 0L
     ) {
@@ -237,7 +329,6 @@ get_acled_data <- function(
       break
     }
 
-    # Add page data to collection
     all_data[[page]] <- page_data
     rows_fetched <- nrow(page_data)
     total_fetched <- total_fetched + rows_fetched
@@ -251,7 +342,6 @@ get_acled_data <- function(
       ))
     }
 
-    # If we got fewer rows than the limit, we've reached the end
     if (rows_fetched < page_limit) {
       if (verbose) {
         message(sprintf(
@@ -263,18 +353,16 @@ get_acled_data <- function(
       break
     }
 
-    # Move to next page
     page <- page + 1
   }
-  # ---- Combine all pages ---------------------------------------------------
+
   if (length(all_data) == 0) {
     message("No data found for the supplied filters.")
     return(invisible(NULL))
   }
-  # Combine all pages into single data frame
+
   df <- dplyr::bind_rows(all_data)
 
-  # Summary message (always shown)
   if (!is.null(df$event_date)) {
     rng <- range(as.character(df$event_date), na.rm = TRUE)
     message(sprintf(
