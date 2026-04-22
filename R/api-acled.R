@@ -267,6 +267,21 @@ get_acled_data <- function(
           success <- TRUE
         },
         error = function(e) {
+          if (
+            identical(auth_state$mode, "oauth") &&
+              identical(auth_method, "auto") &&
+              is_known_oauth_permission_error(conditionMessage(e))
+          ) {
+            if (verbose) {
+              message(
+                "ACLED endpoint rejected OAuth request with HTTP 403; switching to cookie authentication."
+              )
+            }
+            auth_state$mode <<- "cookie"
+            auth_state$cookie_jar <<- perform_cookie_login()
+            return(NULL)
+          }
+
           if (retry_attempt < max_retries) {
             wait_time <- 2^retry_attempt # Exponential backoff: 2, 4, 8 seconds
             if (verbose) {
