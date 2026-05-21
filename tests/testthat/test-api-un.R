@@ -26,6 +26,24 @@ test_that("get_ilo_data works with basic parameters", {
     # May be empty if no data, but should not error
 })
 
+test_that("get_ilo_data returns on invalid indicators", {
+    skip_if_not_installed("httr2")
+
+    start_time <- Sys.time()
+    result <- get_ilo_data(
+        iso3 = "KEN",
+        indicators = "NOT_A_REAL_ILO_INDICATOR",
+        mrv = 3,
+        verbose = FALSE,
+        max_retries = 1,
+        timeout_s = 5
+    )
+    elapsed <- as.numeric(difftime(Sys.time(), start_time, units = "secs"))
+
+    expect_s3_class(result, "data.frame")
+    expect_lt(elapsed, 15)
+})
+
 test_that("get_who_data works with basic parameters", {
     skip_if_not_installed("httr")
 

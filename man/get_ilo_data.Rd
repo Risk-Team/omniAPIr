@@ -10,6 +10,7 @@ get_ilo_data(
   mrv = 23,
   verbose = FALSE,
   max_retries = 3,
+  timeout_s = 30,
   exclude_aggregates = TRUE
 )
 }
@@ -26,6 +27,8 @@ Default is 23.}
 
 \item{max_retries}{Integer. Maximum number of retry attempts for failed requests.
 Default is 3.}
+
+\item{timeout_s}{Numeric. Per-request timeout in seconds. Default is 30.}
 
 \item{exclude_aggregates}{Logical. If TRUE (default), filters out regional and income group aggregates,
 returning only data for individual countries with valid ISO3 codes.}

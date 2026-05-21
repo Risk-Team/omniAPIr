@@ -1565,6 +1565,7 @@ get_undp_data <- function(
 #' @param verbose Logical. If TRUE, prints detailed progress messages. Default is FALSE.
 #' @param max_retries Integer. Maximum number of retry attempts for failed requests.
 #'   Default is 3.
+#' @param timeout_s Numeric. Per-request timeout in seconds. Default is 30.
 #' @param exclude_aggregates Logical. If TRUE (default), filters out regional and income group aggregates,
 #'   returning only data for individual countries with valid ISO3 codes.
 #'
@@ -1608,6 +1609,7 @@ get_ilo_data <- function(
   mrv = 23,
   verbose = FALSE,
   max_retries = 3,
+  timeout_s = 30,
   exclude_aggregates = TRUE
 ) {
   # Validate inputs
@@ -1622,155 +1624,135 @@ get_ilo_data <- function(
   current_year <- as.numeric(format(Sys.Date(), "%Y"))
   years <- (current_year - mrv + 1):current_year
 
-  # Helper function to try fetching data with specific years
-  try_fetch_ilo_data <- function(years_to_try) {
-    # Create simple data frame for indicators
-    indicators_df <- tibble::tibble(indicator = indicators)
-    # Base URL for ILO API
-    base_url <- "https://rplumber.ilo.org/data/indicator/"
+  # Helper function to fetch each indicator once. The ILO endpoint returns the
+  # full indicator series; year fallback therefore filters locally rather than
+  # re-downloading for each candidate year range.
+  fetch_ilo_data <- function() {
+    fetch_one <- function(id) {
+      url <- sprintf("https://rplumber.ilo.org/files/indicator/%s.rds", id)
 
-    # Fetch data
-    ilo_data <- indicators_df %>%
-      dplyr::mutate(
-        api_response = purrr::map(
-          indicator,
-          ~ {
-            # URL encode the indicator ID (replace _ with %5F)
-            encoded_indicator <- gsub("_", "%5F", .x)
-            # Build URL with proper parameters
-            url <- paste0(
-              base_url,
-              "?id=",
-              encoded_indicator,
-              "&type=code&format=.csv"
-            )
+      if (verbose) {
+        message("Requesting: ", url)
+      }
 
-            # Retry logic for each indicator
-            retry_attempt <- 1
-            success <- FALSE
-            response <- NULL
-
-            while (retry_attempt <= max_retries && !success) {
-              tryCatch(
-                {
-                  response <- httr2::request(url) |>
-                    httr2::req_perform()
-                  if (httr2::resp_status(response) == 200) {
-                    content <- httr2::resp_body_string(response)
-                    if (nchar(content) > 0 && !grepl("^\\s*$", content)) {
-                      success <- TRUE
-                      return(utils::read.csv(textConnection(content)))
-                    } else {
-                      if (verbose) {
-                        message(sprintf("Empty response for indicator: %s", .x))
-                      }
-                      return(NULL)
-                    }
-                  } else {
-                    if (retry_attempt < max_retries) {
-                      wait_time <- 2^retry_attempt
-                      if (verbose) {
-                        message(sprintf(
-                          "HTTP %d for indicator %s (attempt %d/%d). Retrying in %d seconds...",
-                          httr2::resp_status(response),
-                          .x,
-                          retry_attempt,
-                          max_retries,
-                          wait_time
-                        ))
-                      }
-                      Sys.sleep(wait_time)
-                      retry_attempt <- retry_attempt + 1
-                    } else {
-                      if (verbose) {
-                        message(sprintf(
-                          "HTTP error %d for indicator: %s after %d attempts",
-                          httr2::resp_status(response),
-                          .x,
-                          max_retries
-                        ))
-                      }
-                      return(NULL)
-                    }
-                  }
-                },
-                error = function(e) {
-                  if (retry_attempt < max_retries) {
-                    wait_time <- 2^retry_attempt
-                    if (verbose) {
-                      message(sprintf(
-                        "Error for indicator %s (attempt %d/%d): %s. Retrying in %d seconds...",
-                        .x,
-                        retry_attempt,
-                        max_retries,
-                        conditionMessage(e),
-                        wait_time
-                      ))
-                    }
-                    Sys.sleep(wait_time)
-                    retry_attempt <<- retry_attempt + 1
-                  } else {
-                    if (verbose) {
-                      message(sprintf(
-                        "Error fetching data for indicator %s after %d attempts: %s",
-                        .x,
-                        max_retries,
-                        conditionMessage(e)
-                      ))
-                    }
-                    return(NULL)
-                  }
-                }
-              )
+      for (attempt in seq_len(max_retries)) {
+        resp <- tryCatch(
+          {
+            httr2::request(url) |>
+              httr2::req_timeout(timeout_s) |>
+              httr2::req_user_agent("omniAPIr/1.0") |>
+              httr2::req_error(is_error = function(r) FALSE) |>
+              httr2::req_perform()
+          },
+          error = function(e) {
+            if (attempt < max_retries) {
+              wait_time <- 2^attempt
+              if (verbose) {
+                message(sprintf(
+                  "  Request failed for %s (attempt %d/%d): %s. Retrying in %ds...",
+                  id, attempt, max_retries, conditionMessage(e), wait_time
+                ))
+              }
+              Sys.sleep(wait_time)
+            } else {
+              warning(sprintf(
+                "Failed to fetch ILO data for indicator %s: %s",
+                id, conditionMessage(e)
+              ))
             }
-            return(NULL)
+            NULL
           }
         )
-      ) %>%
-      dplyr::filter(!purrr::map_lgl(api_response, is.null))
-    # Check if we have any valid data
-    if (nrow(ilo_data) == 0) {
+
+        if (is.null(resp)) next
+
+        status <- httr2::resp_status(resp)
+
+        if (status == 200) {
+          raw_bytes <- httr2::resp_body_raw(resp)
+          df <- tryCatch(
+            {
+              tmp <- tempfile(fileext = ".rds")
+              on.exit(unlink(tmp), add = TRUE)
+              writeBin(raw_bytes, tmp)
+              readRDS(tmp)
+            },
+            error = function(e) {
+              if (verbose) {
+                message(sprintf(
+                  "Failed to parse RDS for %s: %s", id, conditionMessage(e)
+                ))
+              }
+              NULL
+            }
+          )
+          if (!is.null(df)) {
+            df$indicator <- id
+            return(tibble::as_tibble(df))
+          }
+          return(NULL)
+        }
+
+        if (status %in% c(408, 429, 500, 502, 503, 504) && attempt < max_retries) {
+          wait_time <- 2^attempt
+          if (verbose) {
+            message(sprintf(
+              "HTTP %d for %s (attempt %d/%d). Retrying in %ds...",
+              status, id, attempt, max_retries, wait_time
+            ))
+          }
+          Sys.sleep(wait_time)
+          next
+        }
+
+        if (verbose) {
+          message(sprintf("HTTP error %d for indicator: %s", status, id))
+        }
+        return(NULL)
+      }
+      NULL
+    }
+
+    out <- purrr::map_dfr(indicators, fetch_one)
+
+    if (nrow(out) == 0) {
       if (verbose) {
         message("No data retrieved from ILO API for the specified indicators")
       }
       return(data.frame())
     }
 
-    # Unnest the API responses (remove original indicator column to avoid conflicts)
-    ilo_data <- ilo_data %>%
-      dplyr::select(-indicator) %>%
-      tidyr::unnest(api_response)
-
     # Filter by country if specified
     if (!is.null(iso3)) {
-      ilo_data <- ilo_data %>%
-        dplyr::filter(ref_area %in% iso3)
+      out <- out %>% dplyr::filter(ref_area %in% iso3)
     }
 
-    # Filter by years and return ALL columns (with standardized key column names)
-    if ("time" %in% names(ilo_data)) {
-      ilo_data <- ilo_data %>%
-        dplyr::filter(time %in% years_to_try) %>%
-        # Rename key columns for consistency but keep ALL other columns
-        dplyr::rename(
-          isocode = ref_area,
-          Year = time,
-          Value = obs_value
-        )
-    } else {
+    if (!"time" %in% names(out)) {
       if (verbose) {
         message(sprintf(
           "No 'time' column found in ILO data. Available columns: %s",
-          paste(names(ilo_data), collapse = ", ")
+          paste(names(out), collapse = ", ")
         ))
       }
       return(data.frame())
     }
-    return(ilo_data)
+
+    out %>%
+      dplyr::rename(
+        isocode = ref_area,
+        Year = time,
+        Value = obs_value
+      )
   }
 
-  # Try fetching data with the requested years first
-  result <- try_fetch_ilo_data(years)
+  raw_result <- fetch_ilo_data()
+  if (nrow(raw_result) == 0) {
+    message("No data found even with expanded year range")
+    return(raw_result)
+  }
+
+  # Try the requested years first
+  result <- raw_result %>% dplyr::filter(Year %in% years)
 
   # If no data returned, implement smart year discovery
   if (nrow(result) == 0) {
@@ -1799,7 +1781,7 @@ get_ilo_data <- function(
           max(year_range)
         ))
       }
-      result <- try_fetch_ilo_data(year_range)
+      result <- raw_result %>% dplyr::filter(Year %in% year_range)
 
       if (nrow(result) > 0) {
         # Found data! Now return the most recent values within our mrv limit
