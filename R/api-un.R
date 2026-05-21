@@ -1503,6 +1503,7 @@ get_undp_data <- function(
       "isocode",
       "country_code",
       "countryCode",
+      "countryIsoCode",
       "country"
     )
 
@@ -1516,11 +1517,13 @@ get_undp_data <- function(
     if (!is.null(iso_col)) {
       initial_rows <- nrow(result)
 
+      origin_type <- if (iso_col == "country") "country.name" else "iso3c"
+
       result <- result %>%
         dplyr::mutate(
           is_valid_country = !is.na(countrycode::countrycode(
             !!rlang::sym(iso_col),
-            origin = "iso3c",
+            origin = origin_type,
             destination = "country.name",
             warn = FALSE
           ))

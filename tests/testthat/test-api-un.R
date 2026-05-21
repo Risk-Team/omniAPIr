@@ -70,6 +70,26 @@ test_that("get_ilo_data normalizes Year and Value types", {
     }
 })
 
+test_that("get_undp_data preserves country rows for GII", {
+    skip_if_not_installed("httr2")
+
+    apikey <- Sys.getenv("UNDP_KEY")
+    skip_if(identical(apikey, ""), "UNDP_KEY not configured")
+
+    result <- get_undp_data(
+        indicator = "gii",
+        apikey = apikey,
+        iso3 = NULL,
+        mrv = 23,
+        verbose = FALSE
+    )
+
+    expect_s3_class(result, "data.frame")
+    expect_gt(nrow(result), 0)
+    expect_true("countryIsoCode" %in% names(result))
+    expect_true(any(result$countryIsoCode == "KEN"))
+})
+
 test_that("get_who_data works with basic parameters", {
     skip_if_not_installed("httr")
 
