@@ -1742,6 +1742,11 @@ get_ilo_data <- function(
         isocode = ref_area,
         Year = time,
         Value = obs_value
+      ) %>%
+      dplyr::mutate(
+        isocode = as.character(isocode),
+        Year = as.integer(as.character(Year)),
+        Value = as.numeric(as.character(Value))
       )
   }
 

@@ -24,6 +24,11 @@ test_that("get_ilo_data works with basic parameters", {
 
     expect_s3_class(result, "data.frame")
     # May be empty if no data, but should not error
+    if (nrow(result) > 0) {
+        expect_type(result$isocode, "character")
+        expect_type(result$Year, "integer")
+        expect_type(result$Value, "double")
+    }
 })
 
 test_that("get_ilo_data returns on invalid indicators", {
@@ -42,6 +47,27 @@ test_that("get_ilo_data returns on invalid indicators", {
 
     expect_s3_class(result, "data.frame")
     expect_lt(elapsed, 15)
+})
+
+test_that("get_ilo_data normalizes Year and Value types", {
+    skip_if_not_installed("httr2")
+
+    result <- get_ilo_data(
+        iso3 = "KEN",
+        indicators = "EAR_GGAP_OCU_RT_A",
+        mrv = 10,
+        verbose = FALSE,
+        max_retries = 1,
+        timeout_s = 10
+    )
+
+    expect_s3_class(result, "data.frame")
+    if (nrow(result) > 0) {
+        expect_type(result$isocode, "character")
+        expect_type(result$Year, "integer")
+        expect_type(result$Value, "double")
+        expect_true(all(is.na(result$Year) | result$Year >= 1900))
+    }
 })
 
 test_that("get_who_data works with basic parameters", {
