@@ -260,7 +260,8 @@ get_acled_data <- function(
               }
               auth_state$mode <- "cookie"
               auth_state$cookie_jar <- perform_cookie_login()
-              return(NULL)
+              resp <- NULL  # clear 403 response; outer repeat will retry this page with cookies
+              success <- TRUE  # exit inner retry while loop
             }
           }
 
@@ -308,6 +309,8 @@ get_acled_data <- function(
         }
       )
     }
+
+    if (is.null(resp)) next  # switched to cookie auth mid-page; retry with cookies
 
     out <- httr2::resp_body_json(resp, simplifyVector = TRUE)
 
