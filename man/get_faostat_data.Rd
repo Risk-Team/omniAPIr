@@ -83,8 +83,9 @@ It currently works with a limited set of FAOSTAT databases and elements.
   \item \strong{Land use (Element 7209):} agricultural_land, forest_land
   \item \strong{Food Balance Sheets (Elements 664, 674):} grand_total, total (Item aggregated: Grand Total, code 2901)
   \item \strong{Food Balance Sheets (Element 645):} cereals, starchy_roots, pulses, treenuts, vegetables, fruits, eggs, meat, fish, vegetable_oils (aggregated food groups)
-  \item \strong{Food Security (Element 6120 - FS database):} cereals_roots_tubers, dietary_energy_cereals, share_cereals (3-year averages)
+  \item \strong{Food Security SDG indicators (Element 6120 - FS database):} undernourishment/pou/sdg_2_1_1 (SDG 2.1.1), food_insecurity/fies/sdg_2_1_2 (SDG 2.1.2), cereals_roots_tubers (3-year averages)
   \item \strong{CAHD Cost Indicators (Element 6120 - CAHD database):} healthy_diet, starchy_staples, animal_source_food, vegetables, fruits (cost in PPP$/person/day)
+  \item \strong{CAHD Affordability Indicators (Element 6120 - CAHD database):} people_unable_afford/nua_millions (millions), percent_unable_afford/pua_percent (%)
 }
 
 **Limitations:**
@@ -172,14 +173,56 @@ fs_data <- get_faostat_data(
   mrv = 20
 )
 
-# Get Cost and Affordability of a Healthy Diet (CAHD) data
-cahd_data <- get_faostat_data(
+# Get SDG 2.1.1 - Prevalence of undernourishment (\%)
+pou_data <- get_faostat_data(
+  element = "6120",
+  item = "undernourishment",  # or "pou" or "sdg_2_1_1"
+  database = "FS",
+  iso3 = "KEN",
+  mrv = 20
+)
+
+# Get SDG 2.1.2 - Prevalence of moderate or severe food insecurity (\%)
+fies_data <- get_faostat_data(
+  element = "6120",
+  item = "food_insecurity",  # or "fies" or "sdg_2_1_2"
+  database = "FS",
+  iso3 = "KEN",
+  mrv = 20
+)
+
+# Get both SDG food security indicators together
+sdg_food <- get_faostat_data(
+  element = "6120",
+  item = c("undernourishment", "food_insecurity"),
+  database = "FS",
+  iso3 = "KEN"
+)
+
+# Get Cost and Affordability of a Healthy Diet (CAHD) data - cost indicators
+cahd_cost <- get_faostat_data(
   element = "6120",
   item = c("healthy_diet", "starchy_staples", "animal_source_food", "vegetables", "fruits"),
   database = "CAHD",
   iso3 = "KEN",
-  release = "7S2025", # July 2025 release
   mrv = 10
+)
+
+# Get CAHD affordability indicators - number and percent unable to afford
+cahd_afford <- get_faostat_data(
+  element = "6120",
+  item = c("people_unable_afford", "percent_unable_afford"),
+  database = "CAHD",
+  iso3 = "KEN",
+  mrv = 10
+)
+
+# Get all CAHD indicators for a country
+cahd_all <- get_faostat_data(
+  element = "6120",
+  item = c("healthy_diet", "people_unable_afford", "percent_unable_afford"),
+  database = "CAHD",
+  iso3 = "KEN"
 )
 }
 }

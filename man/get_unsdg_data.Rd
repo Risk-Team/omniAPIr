@@ -30,7 +30,12 @@ returning only data for individual countries with valid ISO3 codes.}
 }
 \value{
 A data.frame with columns: indicator, series, seriesDescription, iso3,
-  area, year, value, unit, source.
+  area, year, value, unit, sex, age, location, reporting_type, source.
+  Dimension columns contain NA if not applicable to the indicator:
+  - `sex`: "BOTHSEX", "MALE", "FEMALE", etc.
+  - `age`: "ALLAGE", "15-49", "<5Y", etc.
+  - `location`: "ALLAREA", "URBAN", "RURAL"
+  - `reporting_type`: "G" (Global), "N" (National)
   By default, only includes individual countries (aggregates excluded).
 }
 \description{

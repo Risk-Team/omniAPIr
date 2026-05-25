@@ -10,7 +10,8 @@ get_osm_features(
   verbose = FALSE,
   provider = "geofabrik",
   match_level = 2,
-  max_download_size_mb = 1500
+  max_download_size_mb = 1500,
+  layers = c("points", "lines", "multipolygons")
 )
 }
 \arguments{

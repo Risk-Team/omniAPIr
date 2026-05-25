@@ -2032,3 +2032,206 @@ get_who_data <- function(
 
   out
 }
+
+
+#' Get UNESCO Heritage Data
+#'
+#' @description
+#' Retrieves UNESCO heritage records for a given country from either the World
+#' Heritage List (WHC) or the Intangible Cultural Heritage List (ICH) via the
+#' UNESCO DataHub API (OpenDataSoft v2.1).
+#'
+#' @importFrom magrittr %>%
+#'
+#' @param iso Character. ISO 3166-1 alpha-2 country code (e.g. `"IT"` for Italy).
+#' @param dataset Character. One of `"whc"` (World Heritage List) or `"ich"`
+#'   (Intangible Cultural Heritage List).
+#' @param verbose Logical. If TRUE, prints progress messages. Default is FALSE.
+#' @param max_retries Integer. Maximum number of retry attempts for failed or
+#'   transient-error requests. Default is 3.
+#'
+#' @return A data.frame with one row per heritage item containing all fields
+#'   returned by the API. For WHC, the `coordinates` field is unpacked into
+#'   `latitude` and `longitude` columns. List-valued fields are collapsed to
+#'   semicolon-separated strings. Returns `invisible(NULL)` if no records are
+#'   found.
+#'
+#' @details
+#' API Documentation: \url{https://data.unesco.org/explore/}
+#'
+#' For WHC, transboundary sites shared with other countries are included when
+#' the supplied ISO code appears anywhere in the site's country list.
+#'
+#' For ICH, multinational elements inscribed on behalf of several countries are
+#' included when the supplied ISO code is one of the element's country codes.
+#'
+#' Pagination is handled automatically (100 records per request).
+#'
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#' # World Heritage sites in Italy (with coordinates)
+#' whc_it <- get_unesco_data(iso = "IT", dataset = "whc")
+#'
+#' # Intangible heritage elements associated with Japan
+#' ich_jp <- get_unesco_data(iso = "JP", dataset = "ich")
+#' }
+get_unesco_data <- function(
+  iso,
+  dataset = c("whc", "ich"),
+  verbose = FALSE,
+  max_retries = 3
+) {
+  dataset <- match.arg(dataset)
+
+  if (!is.character(iso) || length(iso) != 1L || !nzchar(iso)) {
+    stop("`iso` must be a single non-empty character string.", call. = FALSE)
+  }
+  iso <- toupper(trimws(iso))
+
+  base_url <- sprintf(
+    "https://data.unesco.org/api/explore/v2.1/catalog/datasets/%s001/records",
+    dataset
+  )
+
+  if (identical(dataset, "whc")) {
+    where_clause <- sprintf('iso_codes like "%s"', iso)
+  } else {
+    where_clause <- sprintf('countries in ("%s")', iso)
+  }
+
+  page_limit  <- 100L
+  offset      <- 0L
+  all_records <- list()
+
+  repeat {
+    if (verbose) {
+      message(sprintf(
+        "Fetching UNESCO %s records for %s (offset %d)...",
+        toupper(dataset), iso, offset
+      ))
+    }
+
+    resp <- NULL
+    for (attempt in seq_len(max_retries)) {
+      resp <- tryCatch(
+        httr2::request(base_url) %>%
+          httr2::req_url_query(
+            where  = where_clause,
+            limit  = page_limit,
+            offset = offset
+          ) %>%
+          httr2::req_error(is_error = function(r) FALSE) %>%
+          httr2::req_perform(),
+        error = function(e) {
+          if (attempt < max_retries) {
+            if (verbose) {
+              message(sprintf(
+                "Request failed (attempt %d/%d): %s. Retrying in %ds...",
+                attempt, max_retries, conditionMessage(e), 2^attempt
+              ))
+            }
+            Sys.sleep(2^attempt)
+          }
+          NULL
+        }
+      )
+
+      if (!is.null(resp)) {
+        status <- httr2::resp_status(resp)
+        if (status %in% c(408L, 429L, 500L, 502L, 503L, 504L) && attempt < max_retries) {
+          if (verbose) {
+            message(sprintf(
+              "HTTP %d (attempt %d/%d). Retrying in %ds...",
+              status, attempt, max_retries, 2^attempt
+            ))
+          }
+          Sys.sleep(2^attempt)
+          resp <- NULL
+          next
+        }
+        break
+      }
+    }
+
+    if (is.null(resp)) {
+      stop("UNESCO DataHub API unavailable after ", max_retries, " attempts.", call. = FALSE)
+    }
+
+    if (httr2::resp_status(resp) >= 400L) {
+      stop(
+        sprintf(
+          "UNESCO DataHub API error %d: %s",
+          httr2::resp_status(resp),
+          httr2::resp_body_string(resp)
+        ),
+        call. = FALSE
+      )
+    }
+
+    body    <- httr2::resp_body_json(resp, simplifyVector = TRUE)
+    records <- body$results
+
+    if (is.null(records) || length(records) == 0L) break
+
+    all_records[[length(all_records) + 1L]] <- records
+
+    if (nrow(records) < page_limit) break
+
+    offset <- offset + page_limit
+  }
+
+  if (length(all_records) == 0L) {
+    message(sprintf("No UNESCO %s records found for ISO code: %s", toupper(dataset), iso))
+    return(invisible(NULL))
+  }
+
+  df <- dplyr::bind_rows(all_records)
+
+  if (identical(dataset, "whc")) {
+    # Unpack coordinates list-column into flat lat/lon columns
+    if (!is.null(df$coordinates) && is.data.frame(df$coordinates)) {
+      df$latitude  <- df$coordinates$lat
+      df$longitude <- df$coordinates$lon
+    } else {
+      df$latitude  <- NA_real_
+      df$longitude <- NA_real_
+    }
+    df$coordinates <- NULL
+
+    # Collapse list-columns to semicolon-separated strings
+    list_cols <- c("states_names", "cultural_criteria", "natural_criteria")
+    for (col in list_cols) {
+      if (!is.null(df[[col]]) && is.list(df[[col]])) {
+        df[[col]] <- vapply(
+          df[[col]],
+          function(x) paste(x, collapse = "; "),
+          character(1L)
+        )
+      }
+    }
+  } else {
+    # Collapse list-columns to semicolon-separated strings
+    list_cols <- c("countries", "concepts_primary_names", "concepts_secondary_names")
+    for (col in list_cols) {
+      if (!is.null(df[[col]]) && is.list(df[[col]])) {
+        df[[col]] <- vapply(
+          df[[col]],
+          function(x) paste(x, collapse = "; "),
+          character(1L)
+        )
+      }
+    }
+  }
+
+  message(sprintf(
+    "✓ UNESCO %s data retrieved: %d record%s for ISO code '%s'",
+    toupper(dataset),
+    nrow(df),
+    ifelse(nrow(df) == 1L, "", "s"),
+    iso
+  ))
+
+  df
+}

@@ -31,10 +31,10 @@ Default is NULL.}
 
 \item{end.date}{Character. End date in "YYYY-MM-DD" format. Default is NULL.}
 
-\item{auth_method}{Character. Authentication mode: \code{"auto"} (default),
-\code{"oauth"}, or \code{"cookie"}. \code{"auto"} tries OAuth first and falls
-back to ACLED's cookie-auth flow if the endpoint rejects the OAuth token with
-the known permission error.}
+\item{auth_method}{Character. Authentication mode: `"auto"` (default),
+`"oauth"`, or `"cookie"`. `"auto"` tries OAuth first and falls back to
+ACLED's cookie-auth flow if the endpoint rejects the OAuth token with the
+known permission error.}
 
 \item{verbose}{Logical. If TRUE, prints detailed progress messages. Default is FALSE.}
 

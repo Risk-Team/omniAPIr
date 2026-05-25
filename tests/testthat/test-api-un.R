@@ -1,15 +1,14 @@
 # Test UN API functions
 test_that("get_unsdg_data works with basic parameters", {
-    skip_if_not_installed("httr")
+    skip_if_not_installed("httr2")
 
     result <- get_unsdg_data(
-        series = "SI_POV_DAY1",
+        indicators = "SI_POV_DAY1",
         mrv = 3,
         verbose = FALSE
     )
 
     expect_s3_class(result, "data.frame")
-    # May be empty if no data, but should not error
 })
 
 test_that("get_ilo_data works with basic parameters", {
@@ -153,4 +152,61 @@ test_that("get_wb_data requires conda_env", {
         get_wb_data(indicators = "SP.POP.TOTL", mrv = 3),
         "conda_env parameter is required"
     )
+})
+
+test_that("get_unesco_data returns WHC data.frame with expected columns", {
+    skip_if_not_installed("httr2")
+
+    result <- get_unesco_data(iso = "IT", dataset = "whc", verbose = FALSE)
+
+    expect_s3_class(result, "data.frame")
+    expect_gt(nrow(result), 0)
+    expect_true(all(c("name_en", "iso_codes", "latitude", "longitude", "category",
+                       "date_inscribed", "transboundary") %in% names(result)))
+    expect_type(result$name_en, "character")
+    expect_type(result$latitude, "double")
+    expect_type(result$longitude, "double")
+})
+
+test_that("get_unesco_data returns ICH data.frame with expected columns", {
+    skip_if_not_installed("httr2")
+
+    result <- get_unesco_data(iso = "IT", dataset = "ich", verbose = FALSE)
+
+    expect_s3_class(result, "data.frame")
+    expect_gt(nrow(result), 0)
+    expect_true(all(c("title_en", "countries", "type_of_element_en",
+                       "inscription_year") %in% names(result)))
+    expect_type(result$title_en, "character")
+    expect_type(result$countries, "character")
+})
+
+test_that("get_unesco_data includes transboundary WHC sites", {
+    skip_if_not_installed("httr2")
+
+    result <- get_unesco_data(iso = "IT", dataset = "whc", verbose = FALSE)
+
+    expect_true(any(result$transboundary == "True"))
+})
+
+test_that("get_unesco_data includes multinational ICH elements", {
+    skip_if_not_installed("httr2")
+
+    result <- get_unesco_data(iso = "IT", dataset = "ich", verbose = FALSE)
+
+    # At least one element shared with other countries (semicolon-separated)
+    expect_true(any(grepl(";", result$countries)))
+})
+
+test_that("get_unesco_data returns invisible NULL for unknown ISO", {
+    skip_if_not_installed("httr2")
+
+    result <- get_unesco_data(iso = "XX", dataset = "whc", verbose = FALSE)
+
+    expect_null(result)
+})
+
+test_that("get_unesco_data errors on invalid iso argument", {
+    expect_error(get_unesco_data(iso = 123, dataset = "whc"), "`iso` must be")
+    expect_error(get_unesco_data(iso = "", dataset = "whc"),  "`iso` must be")
 })
