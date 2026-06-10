@@ -698,6 +698,88 @@ get_ndc_data <- function(
   list(raw = raw, critical = critical, summary = summary, by_sector = by_sector)
 }
 
+#' Resolve Global Fishing Watch EEZ IDs
+#'
+#' Resolves every Global Fishing Watch Exclusive Economic Zone (EEZ) ID
+#' associated with an exact ISO3 country code.
+#'
+#' @param iso3 Character scalar. ISO 3166-1 alpha-3 country code.
+#' @param api_key Character. Global Fishing Watch API token (required).
+#'
+#' @return A tibble with columns `id` (double), `label` (character), `iso3`
+#'   (character), `GEONAME` (character), and `POL_TYPE` (character). A valid
+#'   landlocked country returns a zero-row tibble with these columns. Lookup
+#'   and authentication errors are propagated.
+#'
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#' kenya_eez <- get_fishwatch_eez_ids("KEN", Sys.getenv("FISHWATCH_TOKEN"))
+#' }
+get_fishwatch_eez_ids <- function(iso3, api_key = NULL) {
+  if (is.null(api_key) || length(api_key) != 1L || !nzchar(api_key)) {
+    stop("api_key parameter is required for Global Fishing Watch API")
+  }
+  if (!is.character(iso3) || length(iso3) != 1L || is.na(iso3)) {
+    stop("iso3 must be a single ISO 3166-1 alpha-3 country code")
+  }
+
+  iso3 <- toupper(iso3)
+  country <- suppressWarnings(countrycode::countrycode(
+    iso3,
+    origin = "iso3c",
+    destination = "country.name"
+  ))
+  if (is.na(country)) {
+    stop("Unknown ISO3 country code: ", iso3)
+  }
+
+  result <- .gfwr_region_id(region = iso3, key = api_key)
+  result <- tibble::as_tibble(result)
+
+  expected_columns <- c("id", "label", "iso3", "GEONAME", "POL_TYPE")
+  missing_columns <- setdiff(expected_columns, names(result))
+  if (length(missing_columns) > 0L) {
+    stop(
+      "Unexpected response from gfwr::gfw_region_id(); missing columns: ",
+      paste(missing_columns, collapse = ", ")
+    )
+  }
+
+  exact_match <- !is.na(result$iso3) & result$iso3 == iso3
+  result <- result[exact_match, expected_columns]
+  result[order(result$id), ]
+}
+
+.gfwr_region_id <- function(region, key) {
+  gfwr::gfw_region_id(
+    region = region,
+    region_source = "EEZ",
+    key = key
+  )
+}
+
+.gfwr_fishing_hours <- function(...) {
+  gfwr::gfw_ais_fishing_hours(...)
+}
+
+.empty_fishwatch_data <- function(group_by) {
+  result <- tibble::tibble(
+    Lat = double(),
+    Lon = double(),
+    `Time Range` = double()
+  )
+
+  if (identical(group_by, "FLAG")) {
+    result$flag <- character()
+  }
+
+  result$`Vessel IDs` <- double()
+  result$`Apparent Fishing Hours` <- double()
+  result
+}
+
 #' Get Global Fishing Watch Data
 #'
 #' @description
@@ -710,11 +792,16 @@ get_ndc_data <- function(
 #' @param temporal_resolution Character. Raster temporal resolution. Can be "HOURLY",
 #'   "DAILY", "MONTHLY", "YEARLY". Default is "MONTHLY".
 #' @param start_date Character. Start of date range in YYYY-MM-DD format. Default is "2023-01-01".
-#' @param end_date Character. End of date range in YYYY-MM-DD format. Default is "2023-12-31".
+#' @param end_date Character. Exclusive end of the date range in YYYY-MM-DD
+#'   format. To request a complete calendar year `YYYY`, use
+#'   `start_date = "YYYY-01-01"` and `end_date = "YYYY+1-01-01"`.
+#'   Default is "2024-01-01".
 #' @param region_source Character. Source of the region: "EEZ", "MPA", "RFMO" or "USER_SHAPEFILE".
 #' @param region Character, numeric, or sf object. If region_source is "EEZ", "MPA" or "RFMO",
-#'   GFW region ID (e.g., 5682 for Italian EEZ). If region_source = "USER_SHAPEFILE",
-#'   sf shapefile with area of interest.
+#'   GFW region ID. Multiple EEZ IDs are supported and are requested
+#'   individually before being combined. Use [get_fishwatch_eez_ids()] to
+#'   resolve every EEZ ID for an ISO3 code. If region_source =
+#'   "USER_SHAPEFILE", an sf polygon with the area of interest.
 #' @param group_by Character. Parameter to group by. Can be "VESSEL_ID", "FLAG",
 #'   "GEARTYPE", "FLAGANDGEARTYPE" or "MMSI". Optional.
 #' @param filter_by Character. Fields to filter AIS-based apparent fishing effort.
@@ -724,7 +811,14 @@ get_ndc_data <- function(
 #' @param max_retries Integer. Maximum number of retry attempts for failed requests.
 #'   Default is 3.
 #'
-#' @return A tibble containing fishing effort data with spatial and temporal information.
+#' @return A tibble. For `group_by = "FLAG"`, columns are `Lat` (double),
+#'   `Lon` (double), `Time Range` (double for `YEARLY`; date/datetime-like for
+#'   finer temporal resolutions as parsed by gfwr), `flag` (character),
+#'   `Vessel IDs` (double), and `Apparent Fishing Hours` (double). Other
+#'   `group_by` values replace `flag` with the corresponding grouping columns.
+#'   A successful response with zero fishing activity returns a zero-row
+#'   tibble, never `NULL`. Lookup, authentication, and partial request failures
+#'   raise an error.
 #'
 #' @details
 #' This function provides access to Global Fishing Watch's apparent fishing effort data
@@ -732,7 +826,16 @@ get_ndc_data <- function(
 #'
 #' **Authentication Required:** Obtain an API key from Global Fishing Watch.
 #'
-#' **Date Range Limitation:** Start and end dates should be apart 366 days or less.
+#' **Date Range Limitation:** Start and end dates must be 366 days apart or
+#' less. `start_date` is inclusive and `end_date` is exclusive. For a complete
+#' calendar year, request through January 1 of the following year.
+#'
+#' **Spatial Resolution:** `"HIGH"` is 0.01 degrees and `"LOW"` is 0.1 degrees.
+#'
+#' **Multiple EEZs:** gfwr accepts one EEZ per API request. When `region`
+#' contains multiple EEZ IDs, this function requests all of them and combines
+#' the rows. If any request fails after retries, the function errors rather
+#' than returning partial data.
 #'
 #' **Region Sources:**
 #' - EEZ: Exclusive Economic Zone
@@ -750,9 +853,9 @@ get_ndc_data <- function(
 #'   spatial_resolution = "LOW",
 #'   temporal_resolution = "MONTHLY",
 #'   start_date = "2023-01-01",
-#'   end_date = "2023-12-31",
+#'   end_date = "2024-01-01",
 #'   region_source = "EEZ",
-#'   region = 5682,  # Italian EEZ ID (use get_region_id("ITA", "EEZ") to find)
+#'   region = get_fishwatch_eez_ids("ESP", "your_api_key")$id,
 #'   group_by = "FLAG",
 #'   api_key = "your_api_key"
 #' )
@@ -774,7 +877,7 @@ get_fishwatch_data <- function(
   spatial_resolution = "LOW",
   temporal_resolution = "MONTHLY",
   start_date = "2023-01-01",
-  end_date = "2023-12-31",
+  end_date = "2024-01-01",
   region_source = NULL,
   region = NULL,
   group_by = NULL,
@@ -784,7 +887,7 @@ get_fishwatch_data <- function(
   max_retries = 3
 ) {
   # Validate required parameters
-  if (is.null(api_key)) {
+  if (is.null(api_key) || length(api_key) != 1L || !nzchar(api_key)) {
     stop("api_key parameter is required for Global Fishing Watch API")
   }
 
@@ -795,6 +898,9 @@ get_fishwatch_data <- function(
   if (is.null(region)) {
     stop("region parameter is required")
   }
+  if (length(max_retries) != 1L || is.na(max_retries) || max_retries < 1L) {
+    stop("max_retries must be a positive integer")
+  }
 
   if (verbose) {
     message("Fetching Global Fishing Watch data...")
@@ -804,44 +910,66 @@ get_fishwatch_data <- function(
     message(sprintf("Region source: %s", region_source))
   }
 
-  # Retry logic for API calls
-  for (attempt in 1:max_retries) {
-    tryCatch(
-      {
-        # Call the gfwr package's get_raster function
-        result <- gfwr::get_raster(
+  region_source <- toupper(region_source)
+  regions <- if (identical(region_source, "EEZ")) region else list(region)
+  results <- vector("list", length(regions))
+
+  for (region_index in seq_along(regions)) {
+    current_region <- regions[[region_index]]
+
+    for (attempt in seq_len(max_retries)) {
+      result <- tryCatch(
+        .gfwr_fishing_hours(
           spatial_resolution = spatial_resolution,
           temporal_resolution = temporal_resolution,
           start_date = start_date,
           end_date = end_date,
           region_source = region_source,
-          region = region,
+          region = current_region,
           group_by = group_by,
           filter_by = filter_by,
           key = api_key,
           print_request = verbose
-        )
+        ),
+        error = identity
+      )
 
-        if (verbose) {
-          message(sprintf("Successfully retrieved %d records", nrow(result)))
-        }
-
-        return(result)
-      },
-      error = function(e) {
-        if (attempt == max_retries) {
-          stop(
-            "Failed to retrieve Global Fishing Watch data after ",
-            max_retries,
-            " attempts: ",
-            e$message
-          )
-        }
-        if (verbose) {
-          message(sprintf("Attempt %d failed, retrying...", attempt))
-        }
-        Sys.sleep(2^attempt) # Exponential backoff
+      if (!inherits(result, "error")) {
+        results[[region_index]] <- result
+        break
       }
-    )
+
+      if (attempt == max_retries) {
+        stop(
+          "Failed to retrieve Global Fishing Watch data for region ",
+          current_region,
+          " after ",
+          max_retries,
+          " attempts: ",
+          conditionMessage(result)
+        )
+      }
+      if (verbose) {
+        message(sprintf(
+          "Attempt %d for region %s failed, retrying...",
+          attempt,
+          current_region
+        ))
+      }
+      Sys.sleep(2^attempt)
+    }
   }
+
+  non_null_results <- Filter(Negate(is.null), results)
+  if (length(non_null_results) == 0L) {
+    result <- .empty_fishwatch_data(group_by)
+  } else {
+    result <- dplyr::bind_rows(non_null_results)
+  }
+
+  if (verbose) {
+    message(sprintf("Successfully retrieved %d records", nrow(result)))
+  }
+
+  result
 }

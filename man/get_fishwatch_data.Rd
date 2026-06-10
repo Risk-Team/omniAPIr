@@ -8,7 +8,7 @@ get_fishwatch_data(
   spatial_resolution = "LOW",
   temporal_resolution = "MONTHLY",
   start_date = "2023-01-01",
-  end_date = "2023-12-31",
+  end_date = "2024-01-01",
   region_source = NULL,
   region = NULL,
   group_by = NULL,
@@ -27,13 +27,18 @@ or "HIGH" (0.01 degree). Default is "LOW".}
 
 \item{start_date}{Character. Start of date range in YYYY-MM-DD format. Default is "2023-01-01".}
 
-\item{end_date}{Character. End of date range in YYYY-MM-DD format. Default is "2023-12-31".}
+\item{end_date}{Character. Exclusive end of the date range in YYYY-MM-DD
+format. To request a complete calendar year `YYYY`, use
+`start_date = "YYYY-01-01"` and `end_date = "YYYY+1-01-01"`.
+Default is "2024-01-01".}
 
 \item{region_source}{Character. Source of the region: "EEZ", "MPA", "RFMO" or "USER_SHAPEFILE".}
 
 \item{region}{Character, numeric, or sf object. If region_source is "EEZ", "MPA" or "RFMO",
-GFW region ID (e.g., 5682 for Italian EEZ). If region_source = "USER_SHAPEFILE",
-sf shapefile with area of interest.}
+GFW region ID. Multiple EEZ IDs are supported and are requested
+individually before being combined. Use [get_fishwatch_eez_ids()] to
+resolve every EEZ ID for an ISO3 code. If region_source =
+"USER_SHAPEFILE", an sf polygon with the area of interest.}
 
 \item{group_by}{Character. Parameter to group by. Can be "VESSEL_ID", "FLAG",
 "GEARTYPE", "FLAGANDGEARTYPE" or "MMSI". Optional.}
@@ -49,7 +54,14 @@ SQL expressions like filter_by = "flag IN ('ESP')". Optional.}
 Default is 3.}
 }
 \value{
-A tibble containing fishing effort data with spatial and temporal information.
+A tibble. For `group_by = "FLAG"`, columns are `Lat` (double),
+  `Lon` (double), `Time Range` (double for `YEARLY`; date/datetime-like for
+  finer temporal resolutions as parsed by gfwr), `flag` (character),
+  `Vessel IDs` (double), and `Apparent Fishing Hours` (double). Other
+  `group_by` values replace `flag` with the corresponding grouping columns.
+  A successful response with zero fishing activity returns a zero-row
+  tibble, never `NULL`. Lookup, authentication, and partial request failures
+  raise an error.
 }
 \description{
 Retrieves apparent fishing effort data from Global Fishing Watch API using
@@ -62,7 +74,16 @@ through their API. It requires authentication with a valid API key.
 
 **Authentication Required:** Obtain an API key from Global Fishing Watch.
 
-**Date Range Limitation:** Start and end dates should be apart 366 days or less.
+**Date Range Limitation:** Start and end dates must be 366 days apart or
+less. `start_date` is inclusive and `end_date` is exclusive. For a complete
+calendar year, request through January 1 of the following year.
+
+**Spatial Resolution:** `"HIGH"` is 0.01 degrees and `"LOW"` is 0.1 degrees.
+
+**Multiple EEZs:** gfwr accepts one EEZ per API request. When `region`
+contains multiple EEZ IDs, this function requests all of them and combines
+the rows. If any request fails after retries, the function errors rather
+than returning partial data.
 
 **Region Sources:**
 - EEZ: Exclusive Economic Zone
@@ -77,9 +98,9 @@ fishing_data <- get_fishwatch_data(
   spatial_resolution = "LOW",
   temporal_resolution = "MONTHLY",
   start_date = "2023-01-01",
-  end_date = "2023-12-31",
+  end_date = "2024-01-01",
   region_source = "EEZ",
-  region = 5682,  # Italian EEZ ID (use get_region_id("ITA", "EEZ") to find)
+  region = get_fishwatch_eez_ids("ESP", "your_api_key")$id,
   group_by = "FLAG",
   api_key = "your_api_key"
 )

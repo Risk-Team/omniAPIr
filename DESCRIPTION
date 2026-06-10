@@ -44,7 +44,7 @@ Imports:
     fishstat,
 Suggests:
     testthat (>= 3.0.0),
-    gfwr
+    gfwr (>= 3.0)
 Remotes:
     GlobalFishingWatch/gfwr
 VignetteBuilder: knitr
