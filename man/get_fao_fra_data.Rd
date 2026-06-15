@@ -33,6 +33,8 @@ Default is 3.}
 }
 \value{
 A list containing the parsed JSON response from the FAO FRA API.
+  For `forest_change`, values are returned under
+  `forestAreaNetChangeFrom1a`.
 }
 \description{
 Retrieves forest statistics from the FAO Forest Resources Assessment (FRA) API.

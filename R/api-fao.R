@@ -1040,6 +1040,8 @@ get_faostat_data <- function(
 #'   Default is 3.
 #'
 #' @return A list containing the parsed JSON response from the FAO FRA API.
+#'   For `forest_change`, values are returned under
+#'   `forestAreaNetChangeFrom1a`.
 #'
 #' @details
 #' API Documentation: \url{https://fra-data.fao.org/static/assets/fra-api-swagger.json}
@@ -1094,7 +1096,7 @@ get_fao_fra_data <- function(
       cycleName = as.character(ref_year),
       tableNames = "forestAreaChange",
       countryISOs = iso3,
-      variables = "forestAreaNetChange",
+      variables = "forestAreaNetChangeFrom1a",
       columns = years_groups
     ),
     stop(
@@ -1176,7 +1178,6 @@ get_fao_fra_data <- function(
   }
 
   result <- jsonlite::fromJSON(httr2::resp_body_string(response))
-
   message(sprintf("✓ FAO FRA data retrieved successfully"))
 
   return(result)
