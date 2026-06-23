@@ -46,6 +46,7 @@ get_api_info <- function(api_name = NULL) {
       "get_and_process_ibat_data",
       "get_giga_schools_data",
       "get_ndc_data",
+      "get_hdx_hapi",
       "get_invasive_alien_species",
       "get_osm_features",
       "get_fishstat_data",
@@ -66,6 +67,7 @@ get_api_info <- function(api_name = NULL) {
       "IBAT",
       "Giga Schools",
       "Climate Watch NDC",
+      "HDX HAPI",
       "GBIF/GRIIS",
       "OpenStreetMap",
       "FAO Fishstat",
@@ -86,6 +88,7 @@ get_api_info <- function(api_name = NULL) {
       "https://app.ibat-alliance.org/api/v2/data-downloads",
       "https://uni-ooi-giga-maps-service.azurewebsites.net/api/v1/schools_location/",
       "https://www.climatewatchdata.org/api/v1/data/ndc_content",
+      "https://hapi.humdata.org/api/v2/",
       "https://api.gbif.org/v1/",
       "https://overpass-api.de/api/interpreter",
       "N/A (R package data)",
@@ -106,6 +109,7 @@ get_api_info <- function(api_name = NULL) {
       "https://www.ibat-alliance.org/ibat-conservation/login",
       "https://gigamaps.org/",
       "https://www.climatewatchdata.org/about/ndc",
+      "https://hapi.humdata.org/docs",
       "https://www.gbif.org/developer/summary",
       "https://wiki.openstreetmap.org/wiki/API",
       "https://github.com/socialcopsdev/fishstat",
@@ -119,6 +123,7 @@ get_api_info <- function(api_name = NULL) {
       FALSE,
       FALSE,
       TRUE, # World Bank uses wbgapi Python package
+      FALSE,
       FALSE,
       FALSE,
       FALSE,
@@ -149,11 +154,13 @@ get_api_info <- function(api_name = NULL) {
       NA,
       NA,
       NA,
+      NA,
       "ee, geemap",
       "ee, geemap",
       NA
     ),
     r_packages = c(
+      NA,
       NA,
       NA,
       NA,
@@ -186,6 +193,7 @@ get_api_info <- function(api_name = NULL) {
       TRUE, # IBAT requires API key and token
       TRUE, # Giga requires token
       FALSE,
+      TRUE, # HDX HAPI requires an app identifier
       FALSE,
       FALSE,
       FALSE,
@@ -206,6 +214,7 @@ get_api_info <- function(api_name = NULL) {
       "Integrated Biodiversity Assessment Tool - biodiversity data",
       "Giga Initiative - school connectivity mapping",
       "Climate Watch - Nationally Determined Contributions data",
+      "HDX Humanitarian API - food security, WFP prices, population, poverty, and availability metadata",
       "Global Register of Introduced and Invasive Species via GBIF",
       "OpenStreetMap - crowdsourced geographic features",
       "FAO Fisheries Statistics - fishery production data",

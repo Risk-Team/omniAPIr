@@ -5,8 +5,9 @@
 #'
 #' @description
 #' Provides a unified interface to retrieve data from multiple international APIs
-#' including ACLED, ILO, WHO, FAOSTAT, World Bank, UN SDG, UNDP, FAO (FRA, EMPRES-i, Fishstat),
-#' IBAT, Giga, Climate Watch, GBIF/GRIIS, and OpenStreetMap.
+#' including ACLED, ILO, WHO, FAOSTAT, World Bank, UN SDG, UNDP,
+#' FAO (FRA, EMPRES-i, Fishstat), IBAT, Giga, Climate Watch, HDX HAPI,
+#' GBIF/GRIIS, and OpenStreetMap.
 #'
 #' All functions feature consistent parameter naming, automatic pagination,
 #' smart year discovery, and comprehensive error handling.

@@ -1,7 +1,7 @@
 Package: omniAPIr
 Type: Package
 Title: Unified Interface to Multiple International Data APIs
-Version: 0.1.2
+Version: 0.2.0
 Authors@R: c(
     person(
       "Riccardo", "Soldan",
@@ -12,8 +12,8 @@ Authors@R: c(
 Description: Provides a unified interface to retrieve data from multiple international
     APIs including ACLED (conflict data), ILO (labor statistics), WHO (health indicators),
     FAOSTAT (agriculture data), World Bank, UN SDG, UNDP HDR, FAO EMPRES-i (animal diseases),
-    IBAT (biodiversity), Giga (school connectivity), Climate Watch (NDC data), GBIF/GRIIS
-    (invasive species), OpenStreetMap, and FAO Fishstat. All functions feature consistent
+    IBAT (biodiversity), Giga (school connectivity), Climate Watch (NDC data), HDX HAPI
+    (humanitarian data), GBIF/GRIIS (invasive species), OpenStreetMap, and FAO Fishstat. All functions feature consistent
     parameter naming, automatic pagination, smart year discovery, and comprehensive error handling.
 License: GPL-3
 Encoding: UTF-8

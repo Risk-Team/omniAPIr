@@ -5,11 +5,12 @@
 \alias{omniAPIr-package}
 \title{omniAPIr: Unified Interface to Multiple International Data APIs}
 \description{
-Provides a unified interface to retrieve data from multiple international APIs including ACLED (conflict data), ILO (labor statistics), WHO (health indicators), FAOSTAT (agriculture data), World Bank, UN SDG, UNDP HDR, FAO EMPRES-i (animal diseases), IBAT (biodiversity), Giga (school connectivity), Climate Watch (NDC data), GBIF/GRIIS (invasive species), OpenStreetMap, and FAO Fishstat. All functions feature consistent parameter naming, automatic pagination, smart year discovery, and comprehensive error handling.
+Provides a unified interface to retrieve data from multiple international APIs including ACLED (conflict data), ILO (labor statistics), WHO (health indicators), FAOSTAT (agriculture data), World Bank, UN SDG, UNDP HDR, FAO EMPRES-i (animal diseases), IBAT (biodiversity), Giga (school connectivity), Climate Watch (NDC data), HDX HAPI (humanitarian data), GBIF/GRIIS (invasive species), OpenStreetMap, and FAO Fishstat. All functions feature consistent parameter naming, automatic pagination, smart year discovery, and comprehensive error handling.
 
 Provides a unified interface to retrieve data from multiple international APIs
-including ACLED, ILO, WHO, FAOSTAT, World Bank, UN SDG, UNDP, FAO (FRA, EMPRES-i, Fishstat),
-IBAT, Giga, Climate Watch, GBIF/GRIIS, and OpenStreetMap.
+including ACLED, ILO, WHO, FAOSTAT, World Bank, UN SDG, UNDP,
+FAO (FRA, EMPRES-i, Fishstat), IBAT, Giga, Climate Watch, HDX HAPI,
+GBIF/GRIIS, and OpenStreetMap.
 
 All functions feature consistent parameter naming, automatic pagination,
 smart year discovery, and comprehensive error handling.

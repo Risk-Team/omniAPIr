@@ -4,7 +4,7 @@
 
 ## Overview
 
-`omniAPIr` provides a consistent and user-friendly interface to retrieve data from 15+ major international APIs, including conflict data, health statistics, agricultural information, development indicators, and more. All functions feature:
+`omniAPIr` provides a consistent and user-friendly interface to retrieve data from 16+ major international APIs, including conflict data, health statistics, agricultural information, humanitarian data, development indicators, and more. All functions feature:
 
 - **Consistent parameter naming** (e.g., `iso3`, `indicators`, `mrv`)
 - **Automatic pagination** for large datasets
@@ -108,6 +108,7 @@ api_info <- get_api_info("FAOSTAT")
 | `get_and_process_ibat_data()` | IBAT - Biodiversity | Yes (API key + token) | No |
 | `get_giga_schools_data()` | Giga - School Connectivity | Yes (token) | No |
 | `get_ndc_data()` | Climate Watch - NDC Data | No | No |
+| `get_hdx_hapi_*()` | HDX Humanitarian API - HAPI | Yes (app identifier) | No |
 | `get_invasive_alien_species()` | GBIF/GRIIS - Invasive Species | No | No |
 | `get_osm_features()` | OpenStreetMap - Geographic Features | No | No |
 | `get_fishstat_data()` | FAO Fishstat - Fishery Statistics | No | No |
@@ -184,6 +185,40 @@ who_data <- get_who_data(
   iso3 = "KEN",
   indicators = c("WHOSIS_000001", "WHOSIS_000015"),
   mrv = 15
+)
+```
+
+### HDX HAPI - Humanitarian Data
+
+```r
+# Generate an HDX HAPI app identifier once, then store it in
+# HDX_HAPI_APP_IDENTIFIER for regular use.
+app_id <- encode_hapi_app_identifier(
+  application = "my-analysis",
+  email = "me@example.org"
+)
+Sys.setenv(HDX_HAPI_APP_IDENTIFIER = app_id)
+
+# Check availability before requesting a heavy endpoint
+ken_available <- get_hdx_hapi_availability(
+  iso3 = "KEN",
+  category = "food-security-nutrition-poverty"
+)
+
+# Fetch all Kenya WFP food prices for the latest two years available
+ken_prices <- get_hdx_hapi_wfp_prices(
+  iso3 = "KEN",
+  commodity_name = "Maize",
+  mrv = 2
+)
+
+# Convert market price records with lon/lat to sf
+library(sf)
+ken_prices_sf <- get_hdx_hapi_wfp_prices(
+  iso3 = "KEN",
+  start_date = "2024-01-01",
+  end_date = "2024-12-31",
+  as_sf = TRUE
 )
 ```
 
@@ -309,6 +344,7 @@ Some APIs require authentication credentials:
 2. **UNDP HDR**: API key (request at https://hdr.undp.org)
 3. **IBAT**: API key and token (requires subscription at https://ibat-alliance.org)
 4. **Giga**: Bearer token (contact Giga Initiative)
+5. **HDX HAPI**: App identifier. Generate one with `encode_hapi_app_identifier()` and set `HDX_HAPI_APP_IDENTIFIER`.
 
 ## Error Handling
 
@@ -374,6 +410,7 @@ This package provides R interfaces to the following data sources:
 - IBAT Alliance
 - Giga Initiative
 - Climate Watch
+- HDX Humanitarian API
 - GBIF (Global Biodiversity Information Facility)
 - OpenStreetMap
 

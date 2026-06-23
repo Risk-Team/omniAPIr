@@ -780,6 +780,586 @@ get_fishwatch_eez_ids <- function(iso3, api_key = NULL) {
   result
 }
 
+# HDX HAPI endpoint registry used by get_hdx_hapi().
+.hdx_hapi_endpoints <- c(
+  availability = "/api/v2/metadata/data-availability",
+  data_availability = "/api/v2/metadata/data-availability",
+  wfp_prices = "/api/v2/food-security-nutrition-poverty/food-prices-market-monitor",
+  food_prices = "/api/v2/food-security-nutrition-poverty/food-prices-market-monitor",
+  wfp_markets = "/api/v2/metadata/wfp-market",
+  wfp_market = "/api/v2/metadata/wfp-market",
+  wfp_commodities = "/api/v2/metadata/wfp-commodity",
+  wfp_commodity = "/api/v2/metadata/wfp-commodity",
+  food_security = "/api/v2/food-security-nutrition-poverty/food-security",
+  poverty = "/api/v2/food-security-nutrition-poverty/poverty-rate",
+  poverty_rate = "/api/v2/food-security-nutrition-poverty/poverty-rate",
+  population = "/api/v2/geography-infrastructure/baseline-population",
+  baseline_population = "/api/v2/geography-infrastructure/baseline-population"
+)
+
+.hdx_hapi_endpoint_path <- function(endpoint) {
+  if (!is.character(endpoint) || length(endpoint) != 1 || !nzchar(endpoint)) {
+    stop("endpoint must be a non-empty character string.", call. = FALSE)
+  }
+
+  if (grepl("^https?://", endpoint)) {
+    return(endpoint)
+  }
+
+  if (startsWith(endpoint, "/")) {
+    return(endpoint)
+  }
+
+  endpoint_id <- gsub("-", "_", tolower(endpoint))
+  if (endpoint_id %in% names(.hdx_hapi_endpoints)) {
+    return(unname(.hdx_hapi_endpoints[[endpoint_id]]))
+  }
+
+  paste0("/api/v2/", endpoint)
+}
+
+.hdx_hapi_compact_query <- function(query) {
+  query <- query[!vapply(query, is.null, logical(1))]
+  query <- query[!vapply(query, function(x) length(x) == 1 && is.na(x), logical(1))]
+  query <- query[!vapply(query, function(x) length(x) == 1 && identical(x, ""), logical(1))]
+
+  bad_lengths <- names(query)[vapply(query, function(x) length(x) > 1, logical(1))]
+  if (length(bad_lengths) > 0) {
+    stop(
+      "HDX HAPI query parameters must be scalar. Non-scalar parameter(s): ",
+      paste(bad_lengths, collapse = ", "),
+      call. = FALSE
+    )
+  }
+
+  lapply(query, function(x) {
+    if (inherits(x, "Date")) {
+      return(format(x, "%Y-%m-%d"))
+    }
+    if (inherits(x, "POSIXt")) {
+      return(format(x, "%Y-%m-%dT%H:%M:%S", tz = "UTC"))
+    }
+    x
+  })
+}
+
+.hdx_hapi_parse_response <- function(resp, output_format) {
+  body <- httr2::resp_body_string(resp)
+
+  if (tolower(output_format) == "csv") {
+    if (!nzchar(body)) {
+      return(tibble::tibble())
+    }
+    return(readr::read_csv(I(body), show_col_types = FALSE))
+  }
+
+  parsed <- jsonlite::fromJSON(body, flatten = TRUE)
+  if (is.null(parsed$data) || length(parsed$data) == 0) {
+    return(tibble::tibble())
+  }
+
+  tibble::as_tibble(parsed$data)
+}
+
+.hdx_hapi_perform <- function(req, max_retries, retry_base) {
+  req <- httr2::req_retry(
+    req,
+    max_tries = max_retries,
+    retry_on_failure = TRUE,
+    is_transient = function(resp) {
+      status <- httr2::resp_status(resp)
+      status == 429 || status >= 500
+    },
+    backoff = function(attempt) {
+      min(60, retry_base ^ attempt)
+    }
+  )
+
+  req <- httr2::req_error(req, is_error = function(resp) FALSE)
+  resp <- httr2::req_perform(req)
+  status <- httr2::resp_status(resp)
+
+  if (status >= 400) {
+    body <- tryCatch(httr2::resp_body_string(resp), error = function(e) "")
+    stop(
+      sprintf("HDX HAPI request failed with HTTP %s. %s", status, body),
+      call. = FALSE
+    )
+  }
+
+  resp
+}
+
+.hdx_hapi_parse_reference_periods <- function(x) {
+  reference_cols <- intersect(
+    c("reference_period_start", "reference_period_end"),
+    names(x)
+  )
+
+  for (col in reference_cols) {
+    x[[col]] <- as.POSIXct(x[[col]], tz = "UTC", format = "%Y-%m-%dT%H:%M:%S")
+  }
+
+  if ("reference_period_start" %in% names(x)) {
+    x$Year <- as.integer(format(x$reference_period_start, "%Y"))
+  }
+
+  x
+}
+
+.hdx_hapi_normalize_common <- function(x) {
+  x <- .hdx_hapi_parse_reference_periods(x)
+
+  if ("location_code" %in% names(x) && !"iso3" %in% names(x)) {
+    x$iso3 <- x$location_code
+  }
+
+  if ("location_name" %in% names(x) && !"country" %in% names(x)) {
+    x$country <- x$location_name
+  }
+
+  x$source <- "HDX HAPI"
+  x
+}
+
+.hdx_hapi_ensure_columns <- function(x, columns) {
+  for (col in columns) {
+    if (!col %in% names(x)) {
+      x[[col]] <- NA
+    }
+  }
+  x[, columns, drop = FALSE]
+}
+
+.hdx_hapi_empty_schema <- list(
+  availability = c(
+    "location_code", "location_name", "admin1_code", "admin1_name",
+    "admin2_code", "admin2_name", "admin_level", "category", "subcategory",
+    "hapi_updated_date", "iso3", "country", "source"
+  ),
+  wfp_markets = c(
+    "location_code", "location_name", "admin1_code", "admin1_name",
+    "admin2_code", "admin2_name", "admin_level", "code", "name", "lat",
+    "lon", "iso3", "country", "source"
+  ),
+  wfp_commodities = c("code", "category", "name", "source"),
+  wfp_prices = c(
+    "location_code", "location_name", "admin1_code", "admin1_name",
+    "admin2_code", "admin2_name", "admin_level", "resource_hdx_id",
+    "market_code", "market_name", "commodity_code", "commodity_name",
+    "commodity_category", "currency_code", "unit", "price_flag",
+    "price_type", "price", "lat", "lon", "reference_period_start",
+    "reference_period_end", "Year", "iso3", "country", "source"
+  ),
+  food_security = c(
+    "location_code", "location_name", "admin1_code", "admin1_name",
+    "admin2_code", "admin2_name", "admin_level", "resource_hdx_id",
+    "ipc_phase", "ipc_type", "population_in_phase",
+    "population_fraction_in_phase", "reference_period_start",
+    "reference_period_end", "Year", "iso3", "country", "source"
+  ),
+  poverty = c(
+    "location_code", "location_name", "admin1_code", "admin1_name",
+    "admin_level", "resource_hdx_id", "mpi", "headcount_ratio",
+    "intensity_of_deprivation", "vulnerable_to_poverty",
+    "in_severe_poverty", "reference_period_start", "reference_period_end",
+    "Year", "iso3", "country", "source"
+  ),
+  population = c(
+    "location_code", "location_name", "admin1_code", "admin1_name",
+    "admin2_code", "admin2_name", "admin_level", "resource_hdx_id",
+    "gender", "age_range", "min_age", "max_age", "population",
+    "reference_period_start", "reference_period_end", "Year", "iso3",
+    "country", "source"
+  )
+)
+
+.hdx_hapi_apply_mrv <- function(x, mrv) {
+  if (is.null(mrv)) {
+    return(x)
+  }
+
+  if (!is.numeric(mrv) || length(mrv) != 1 || is.na(mrv) || mrv < 1) {
+    stop("mrv must be a positive integer.", call. = FALSE)
+  }
+
+  if (!"Year" %in% names(x) || nrow(x) == 0) {
+    return(x)
+  }
+
+  years <- sort(unique(stats::na.omit(x$Year)), decreasing = TRUE)
+  keep <- years[seq_len(min(as.integer(mrv), length(years)))]
+  x[x$Year %in% keep, , drop = FALSE]
+}
+
+.hdx_hapi_as_sf <- function(x) {
+  if (!all(c("lon", "lat") %in% names(x))) {
+    stop("as_sf = TRUE requires lon and lat columns in the HDX HAPI response.", call. = FALSE)
+  }
+
+  if (nrow(x) == 0) {
+    return(sf::st_sf(x, geometry = sf::st_sfc(crs = 4326)))
+  }
+
+  sf::st_as_sf(x, coords = c("lon", "lat"), crs = 4326, remove = FALSE, na.fail = FALSE)
+}
+
+#' Fetch data from the HDX Humanitarian API
+#'
+#' @description
+#' Low-level helper for HDX HAPI endpoints. This uses the HDX Humanitarian API,
+#' not the generic HDX CKAN API. It accepts either a full endpoint path such as
+#' \code{"/api/v2/metadata/data-availability"} or a short endpoint id such as
+#' \code{"availability"} or \code{"wfp_prices"}.
+#'
+#' @param endpoint Character. HAPI endpoint path, URL, or short endpoint id.
+#' @param ... Additional scalar query parameters passed to the endpoint.
+#' @param app_identifier Character. Base64 encoded HAPI app identifier. Defaults
+#'   to \code{Sys.getenv("HDX_HAPI_APP_IDENTIFIER")}.
+#' @param app_identifier_in Character. Send the app identifier as a query
+#'   parameter (\code{"query"}) or as the
+#'   \code{X-HDX-HAPI-APP-IDENTIFIER} header (\code{"header"}).
+#' @param page_size Integer. Records per HAPI page. HAPI caps this at 10,000;
+#'   this controls request size only, not the number of rows returned.
+#' @param output_format Character. HAPI output format. Defaults to \code{"json"}.
+#' @param max_retries Integer. Maximum retry attempts for HTTP 429 and 5xx
+#'   responses.
+#' @param retry_base Numeric. Exponential backoff base in seconds.
+#' @param base_url Character. HAPI base URL.
+#'
+#' @return A tibble containing rows from the HAPI \code{data} array.
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#' availability <- get_hdx_hapi("availability", location_code = "KEN")
+#' prices <- get_hdx_hapi("wfp_prices", location_code = "KEN", page_size = 1000)
+#' }
+get_hdx_hapi <- function(
+  endpoint,
+  ...,
+  app_identifier = Sys.getenv("HDX_HAPI_APP_IDENTIFIER"),
+  app_identifier_in = c("query", "header"),
+  page_size = 10000,
+  output_format = "json",
+  max_retries = 3,
+  retry_base = 2,
+  base_url = "https://hapi.humdata.org"
+) {
+  app_identifier_in <- match.arg(app_identifier_in)
+  output_format <- tolower(output_format)
+
+  if (!nzchar(app_identifier)) {
+    stop(
+      "HDX HAPI app identifier is required. Set HDX_HAPI_APP_IDENTIFIER or ",
+      "pass app_identifier. You can generate one with encode_hapi_app_identifier().",
+      call. = FALSE
+    )
+  }
+
+  if (!output_format %in% c("json", "csv")) {
+    stop("output_format must be 'json' or 'csv'.", call. = FALSE)
+  }
+
+  if (!is.numeric(page_size) || length(page_size) != 1 || is.na(page_size) ||
+      page_size < 1 || page_size > 10000) {
+    stop("page_size must be a positive integer no greater than 10,000.", call. = FALSE)
+  }
+
+  page_size <- as.integer(page_size)
+  path <- .hdx_hapi_endpoint_path(endpoint)
+  url <- if (grepl("^https?://", path)) path else paste0(base_url, path)
+
+  query <- .hdx_hapi_compact_query(list(...))
+  managed_params <- intersect(names(query), c("limit", "offset"))
+  if (length(managed_params) > 0) {
+    stop(
+      "limit and offset are managed internally so HDX HAPI calls fetch all pages. ",
+      "Use page_size only to tune per-page request size.",
+      call. = FALSE
+    )
+  }
+
+  query$output_format <- output_format
+  query$limit <- page_size
+
+  pages <- list()
+  current_offset <- 0L
+
+  repeat {
+    query$offset <- current_offset
+
+    if (app_identifier_in == "query") {
+      query$app_identifier <- app_identifier
+    }
+
+    req <- httr2::request(url)
+    req <- do.call(httr2::req_url_query, c(list(req), query))
+
+    if (app_identifier_in == "header") {
+      req <- httr2::req_headers(
+        req,
+        `X-HDX-HAPI-APP-IDENTIFIER` = app_identifier
+      )
+    }
+
+    resp <- .hdx_hapi_perform(req, max_retries = max_retries, retry_base = retry_base)
+    page <- .hdx_hapi_parse_response(resp, output_format = output_format)
+    pages[[length(pages) + 1]] <- page
+
+    if (nrow(page) < page_size) {
+      break
+    }
+
+    current_offset <- current_offset + page_size
+  }
+
+  dplyr::bind_rows(pages)
+}
+
+#' Encode an HDX HAPI app identifier
+#'
+#' @param application Character. Calling application name.
+#' @param email Character. Contact email address.
+#'
+#' @return Character. Encoded app identifier for HDX HAPI calls.
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#' encode_hapi_app_identifier("my-analysis", "me@example.org")
+#' }
+encode_hapi_app_identifier <- function(application, email) {
+  resp <- httr2::request("https://hapi.humdata.org/api/v2/encode_app_identifier") |>
+    httr2::req_url_query(application = application, email = email) |>
+    .hdx_hapi_perform(max_retries = 3, retry_base = 2)
+
+  parsed <- jsonlite::fromJSON(httr2::resp_body_string(resp))
+  parsed$encoded_app_identifier
+}
+
+#' Get HDX HAPI data availability
+#'
+#' @param iso3 Character. Optional ISO3 country code.
+#' @param category Character. Optional HAPI category.
+#' @param subcategory Character. Optional HAPI subcategory.
+#' @param admin_level Integer. Optional admin level.
+#' @param ... Additional arguments passed to \code{get_hdx_hapi()}.
+#'
+#' @return A tibble.
+#' @export
+get_hdx_hapi_availability <- function(
+  iso3 = NULL,
+  category = NULL,
+  subcategory = NULL,
+  admin_level = NULL,
+  ...
+) {
+  out <- get_hdx_hapi(
+    "availability",
+    location_code = iso3,
+    category = category,
+    subcategory = subcategory,
+    admin_level = admin_level,
+    ...
+  )
+  out <- .hdx_hapi_normalize_common(out)
+  .hdx_hapi_ensure_columns(out, .hdx_hapi_empty_schema$availability)
+}
+
+#' Get HDX HAPI WFP food prices
+#'
+#' @param iso3 Character. Optional ISO3 country code.
+#' @param commodity_code Character. Optional WFP commodity code.
+#' @param commodity_name Character. Optional commodity name.
+#' @param commodity_category Character. Optional commodity category.
+#' @param start_date,end_date Character or Date. Optional reference period
+#'   overlap filters.
+#' @param admin_level Integer. Optional admin level.
+#' @param mrv Integer. Optional number of most recent years to keep after
+#'   retrieval, based on \code{reference_period_start}.
+#' @param as_sf Logical. If TRUE, return an sf object using lon/lat coordinates.
+#' @param ... Additional arguments passed to \code{get_hdx_hapi()}.
+#'
+#' @return A tibble, or an sf object when \code{as_sf = TRUE}.
+#' @export
+get_hdx_hapi_wfp_prices <- function(
+  iso3 = NULL,
+  commodity_code = NULL,
+  commodity_name = NULL,
+  commodity_category = NULL,
+  start_date = NULL,
+  end_date = NULL,
+  admin_level = NULL,
+  mrv = NULL,
+  as_sf = FALSE,
+  ...
+) {
+  out <- get_hdx_hapi(
+    "wfp_prices",
+    location_code = iso3,
+    commodity_code = commodity_code,
+    commodity_name = commodity_name,
+    commodity_category = commodity_category,
+    start_date = start_date,
+    end_date = end_date,
+    admin_level = admin_level,
+    ...
+  )
+  out <- .hdx_hapi_normalize_common(out)
+  out <- .hdx_hapi_ensure_columns(out, .hdx_hapi_empty_schema$wfp_prices)
+  out <- .hdx_hapi_apply_mrv(out, mrv)
+
+  if (isTRUE(as_sf)) {
+    out <- .hdx_hapi_as_sf(out)
+  }
+
+  out
+}
+
+#' Get HDX HAPI WFP markets
+#'
+#' @param iso3 Character. Optional ISO3 country code.
+#' @param as_sf Logical. If TRUE, return an sf object using lon/lat coordinates.
+#' @param ... Additional arguments passed to \code{get_hdx_hapi()}.
+#'
+#' @return A tibble, or an sf object when \code{as_sf = TRUE}.
+#' @export
+get_hdx_hapi_wfp_markets <- function(iso3 = NULL, as_sf = FALSE, ...) {
+  out <- get_hdx_hapi("wfp_markets", location_code = iso3, ...)
+  out <- .hdx_hapi_normalize_common(out)
+  out <- .hdx_hapi_ensure_columns(out, .hdx_hapi_empty_schema$wfp_markets)
+
+  if (isTRUE(as_sf)) {
+    out <- .hdx_hapi_as_sf(out)
+  }
+
+  out
+}
+
+#' Get HDX HAPI WFP commodities
+#'
+#' @param ... Additional arguments passed to \code{get_hdx_hapi()}.
+#'
+#' @return A tibble.
+#' @export
+get_hdx_hapi_wfp_commodities <- function(...) {
+  out <- get_hdx_hapi("wfp_commodities", ...)
+  out <- .hdx_hapi_normalize_common(out)
+  .hdx_hapi_ensure_columns(out, .hdx_hapi_empty_schema$wfp_commodities)
+}
+
+#' Get HDX HAPI food security data
+#'
+#' @param iso3 Character. Optional ISO3 country code.
+#' @param ipc_phase Character. Optional IPC phase.
+#' @param ipc_type Character. Optional IPC type.
+#' @param start_date,end_date Character or Date. Optional reference period
+#'   overlap filters.
+#' @param admin_level Integer. Optional admin level.
+#' @param mrv Integer. Optional number of most recent years to keep after
+#'   retrieval, based on \code{reference_period_start}.
+#' @param ... Additional arguments passed to \code{get_hdx_hapi()}.
+#'
+#' @return A tibble.
+#' @export
+get_hdx_hapi_food_security <- function(
+  iso3 = NULL,
+  ipc_phase = NULL,
+  ipc_type = NULL,
+  start_date = NULL,
+  end_date = NULL,
+  admin_level = NULL,
+  mrv = NULL,
+  ...
+) {
+  out <- get_hdx_hapi(
+    "food_security",
+    location_code = iso3,
+    ipc_phase = ipc_phase,
+    ipc_type = ipc_type,
+    start_date = start_date,
+    end_date = end_date,
+    admin_level = admin_level,
+    ...
+  )
+  out <- .hdx_hapi_normalize_common(out)
+  out <- .hdx_hapi_ensure_columns(out, .hdx_hapi_empty_schema$food_security)
+  .hdx_hapi_apply_mrv(out, mrv)
+}
+
+#' Get HDX HAPI poverty data
+#'
+#' @param iso3 Character. Optional ISO3 country code.
+#' @param admin_level Integer. Optional admin level.
+#' @param start_date,end_date Character or Date. Optional reference period
+#'   overlap filters.
+#' @param mrv Integer. Optional number of most recent years to keep after
+#'   retrieval, based on \code{reference_period_start}.
+#' @param ... Additional arguments passed to \code{get_hdx_hapi()}.
+#'
+#' @return A tibble.
+#' @export
+get_hdx_hapi_poverty <- function(
+  iso3 = NULL,
+  admin_level = NULL,
+  start_date = NULL,
+  end_date = NULL,
+  mrv = NULL,
+  ...
+) {
+  out <- get_hdx_hapi(
+    "poverty",
+    location_code = iso3,
+    admin_level = admin_level,
+    start_date = start_date,
+    end_date = end_date,
+    ...
+  )
+  out <- .hdx_hapi_normalize_common(out)
+  out <- .hdx_hapi_ensure_columns(out, .hdx_hapi_empty_schema$poverty)
+  .hdx_hapi_apply_mrv(out, mrv)
+}
+
+#' Get HDX HAPI baseline population data
+#'
+#' @param iso3 Character. Optional ISO3 country code.
+#' @param gender Character. Optional gender filter.
+#' @param age_range Character. Optional age range filter.
+#' @param admin_level Integer. Optional admin level.
+#' @param start_date,end_date Character or Date. Optional reference period
+#'   overlap filters.
+#' @param mrv Integer. Optional number of most recent years to keep after
+#'   retrieval, based on \code{reference_period_start}.
+#' @param ... Additional arguments passed to \code{get_hdx_hapi()}.
+#'
+#' @return A tibble.
+#' @export
+get_hdx_hapi_population <- function(
+  iso3 = NULL,
+  gender = NULL,
+  age_range = NULL,
+  admin_level = NULL,
+  start_date = NULL,
+  end_date = NULL,
+  mrv = NULL,
+  ...
+) {
+  out <- get_hdx_hapi(
+    "population",
+    location_code = iso3,
+    gender = gender,
+    age_range = age_range,
+    admin_level = admin_level,
+    start_date = start_date,
+    end_date = end_date,
+    ...
+  )
+  out <- .hdx_hapi_normalize_common(out)
+  out <- .hdx_hapi_ensure_columns(out, .hdx_hapi_empty_schema$population)
+  .hdx_hapi_apply_mrv(out, mrv)
+}
+
 #' Get Global Fishing Watch Data
 #'
 #' @description
