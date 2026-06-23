@@ -183,6 +183,438 @@ get_giga_schools_data <- function(
 }
 
 
+#' Get OpenStreetMap Tag Catalog
+#'
+#' @description
+#' Returns the built-in OpenStreetMap tag definitions used by
+#' \code{get_osm_feature_class()}.
+#'
+#' @return A named list. Each element is a feature class and contains a named
+#'   list of OSM tag keys and accepted values.
+#'
+#' @export
+#'
+#' @examples
+#' catalog <- get_osm_tag_catalog()
+#' names(catalog)
+get_osm_tag_catalog <- function() {
+  list(
+    food_retail = list(
+      shop = c(
+        "supermarket", "convenience", "general", "grocery",
+        "greengrocer", "butcher", "bakery", "dairy", "seafood",
+        "frozen_food", "food", "kiosk"
+      )
+    ),
+    markets = list(
+      amenity = "marketplace",
+      shop = c("market", "farm")
+    ),
+    health_facilities = list(
+      amenity = c(
+        "hospital", "clinic", "doctors", "health_post", "pharmacy",
+        "dentist"
+      ),
+      healthcare = c(
+        "hospital", "clinic", "doctor", "health_post", "pharmacy",
+        "dentist", "nurse"
+      )
+    ),
+    schools = list(
+      amenity = c("school", "kindergarten", "college", "university"),
+      building = c("school", "college", "university")
+    ),
+    water_points = list(
+      amenity = c("drinking_water", "water_point"),
+      man_made = c("water_well", "water_tap", "water_tower"),
+      emergency = "water_tank"
+    ),
+    slaughterhouses = list(
+      amenity = "slaughterhouse",
+      industrial = "slaughterhouse",
+      building = "slaughterhouse"
+    ),
+    veterinary_services = list(
+      amenity = "veterinary",
+      healthcare = "veterinary"
+    ),
+    storage = list(
+      building = c("warehouse", "storage_tank", "silo"),
+      man_made = c("storage_tank", "silo"),
+      industrial = c("warehouse", "depot")
+    ),
+    transport_nodes = list(
+      amenity = c("bus_station", "ferry_terminal"),
+      railway = c("station", "halt", "tram_stop"),
+      highway = c("bus_stop", "services"),
+      public_transport = c("station", "stop_position", "platform"),
+      aeroway = c("aerodrome", "terminal", "helipad")
+    ),
+    border_crossings = list(
+      barrier = "border_control",
+      amenity = "border_control",
+      border_control = c("checkpoint", "border_crossing"),
+      highway = "border_control"
+    ),
+    major_roads = list(
+      highway = c(
+        "motorway", "trunk", "primary", "secondary", "tertiary",
+        "motorway_link", "trunk_link", "primary_link", "secondary_link",
+        "tertiary_link"
+      )
+    )
+  )
+}
+
+
+#' List OpenStreetMap Feature Classes
+#'
+#' @description
+#' Lists the feature classes available through \code{get_osm_feature_class()}.
+#'
+#' @return A character vector of feature class names.
+#'
+#' @export
+#'
+#' @examples
+#' list_osm_feature_classes()
+list_osm_feature_classes <- function() {
+  names(get_osm_tag_catalog())
+}
+
+
+normalize_osm_tag_set <- function(tag_set) {
+  if (!is.list(tag_set) || is.null(names(tag_set))) {
+    stop("OSM tag sets must be named lists.", call. = FALSE)
+  }
+
+  tag_names <- names(tag_set)
+  if (any(is.na(tag_names) | tag_names == "")) {
+    stop("Every OSM tag set entry must have a tag key name.", call. = FALSE)
+  }
+
+  normalized <- list()
+  for (tag_name in tag_names) {
+    values <- unique(stats::na.omit(as.character(
+      unlist(tag_set[[tag_name]], use.names = FALSE)
+    )))
+
+    if (length(values) == 0) {
+      next
+    }
+
+    normalized[[tag_name]] <- unique(c(normalized[[tag_name]], values))
+  }
+
+  normalized[sort(names(normalized))]
+}
+
+
+combine_osm_tag_sets <- function(tag_sets) {
+  if (!is.list(tag_sets)) {
+    stop("tag_sets must be a list of named OSM tag sets.", call. = FALSE)
+  }
+
+  combined <- list()
+  for (tag_set in tag_sets) {
+    tag_set <- normalize_osm_tag_set(tag_set)
+    for (tag_name in names(tag_set)) {
+      combined[[tag_name]] <- unique(c(combined[[tag_name]], tag_set[[tag_name]]))
+    }
+  }
+
+  combined[sort(names(combined))]
+}
+
+
+osm_feature_label <- function(feature_class) {
+  label <- gsub("_", " ", feature_class)
+  tools::toTitleCase(label)
+}
+
+
+osm_sql_quote_identifier <- function(x) {
+  paste0('"', gsub('"', '""', x, fixed = TRUE), '"')
+}
+
+
+osm_sql_quote_value <- function(x) {
+  paste0("'", gsub("'", "''", x, fixed = TRUE), "'")
+}
+
+
+build_osm_where_clause <- function(tag_sets) {
+  tag_sets <- normalize_osm_tag_set(tag_sets)
+
+  if (length(tag_sets) == 0) {
+    stop("At least one OSM tag value is required.", call. = FALSE)
+  }
+
+  conditions <- lapply(names(tag_sets), function(tag) {
+    values <- tag_sets[[tag]]
+    tag_sql <- osm_sql_quote_identifier(tag)
+    if (length(values) == 1) {
+      sprintf("%s = %s", tag_sql, osm_sql_quote_value(values))
+    } else {
+      quoted_values <- paste(vapply(
+        values,
+        osm_sql_quote_value,
+        character(1),
+        USE.NAMES = FALSE
+      ), collapse = ", ")
+      sprintf("%s IN (%s)", tag_sql, quoted_values)
+    }
+  })
+
+  paste0("(", paste(conditions, collapse = " OR "), ")")
+}
+
+
+empty_osm_sf <- function(template = NULL, feature_class = NULL, feature_label = NULL) {
+  if (inherits(template, "sf")) {
+    result <- template[0, , drop = FALSE]
+    if (is.na(sf::st_crs(result))) {
+      result <- sf::st_set_crs(result, 4326)
+    } else {
+      result <- sf::st_transform(result, 4326)
+    }
+  } else {
+    result <- sf::st_sf(osm_id = character(), geometry = sf::st_sfc(crs = 4326))
+  }
+
+  if (!is.null(feature_class)) {
+    result$feature_class <- character()
+  }
+  if (!is.null(feature_label)) {
+    result$feature_label <- character()
+  }
+
+  result
+}
+
+
+add_osm_feature_metadata <- function(x, feature_class, feature_label) {
+  if (nrow(x) == 0) {
+    x$feature_class <- character()
+    x$feature_label <- character()
+  } else {
+    x$feature_class <- rep(feature_class, nrow(x))
+    x$feature_label <- rep(feature_label, nrow(x))
+  }
+
+  x
+}
+
+
+filter_osm_sf_by_tags <- function(x, tag_set, feature_class, feature_label) {
+  if (!inherits(x, "sf") || nrow(x) == 0) {
+    return(empty_osm_sf(x, feature_class, feature_label))
+  }
+
+  tag_set <- normalize_osm_tag_set(tag_set)
+  matches <- rep(FALSE, nrow(x))
+
+  for (tag_name in names(tag_set)) {
+    if (!tag_name %in% names(x)) {
+      next
+    }
+
+    tag_values <- as.character(x[[tag_name]])
+    matches <- matches | (!is.na(tag_values) & tag_values %in% tag_set[[tag_name]])
+  }
+
+  result <- x[matches, , drop = FALSE]
+  if (is.na(sf::st_crs(result))) {
+    result <- sf::st_set_crs(result, 4326)
+  } else {
+    result <- sf::st_transform(result, 4326)
+  }
+
+  add_osm_feature_metadata(result, feature_class, feature_label)
+}
+
+
+filter_osm_features_by_tags <- function(osm_features, tag_set,
+                                        feature_class = NA_character_,
+                                        feature_label = NA_character_) {
+  layer_names <- c("pts", "lines", "poly", "multipoly")
+  result <- stats::setNames(vector("list", length(layer_names)), layer_names)
+
+  for (layer_name in layer_names) {
+    layer <- osm_features[[layer_name]]
+    result[[layer_name]] <- filter_osm_sf_by_tags(
+      layer,
+      tag_set,
+      feature_class,
+      feature_label
+    )
+  }
+
+  result
+}
+
+
+osm_cache_file <- function(region_sf, provider, match_level, layers, tag_sets, cache_dir) {
+  region_4326 <- sf::st_transform(region_sf, 4326)
+  cache_key <- rlang::hash(list(
+    region_geometry = sf::st_as_binary(sf::st_geometry(region_4326)),
+    provider = provider,
+    match_level = match_level,
+    layers = sort(layers),
+    tag_sets = normalize_osm_tag_set(tag_sets)
+  ))
+
+  file.path(cache_dir, paste0("osm_features_", cache_key, ".rds"))
+}
+
+
+#' Get OpenStreetMap Features by Feature Class
+#'
+#' @description
+#' Retrieves one or more built-in OSM feature classes for a region. This is a
+#' user-friendly wrapper around \code{get_osm_features()}, which remains
+#' available for custom tag-based queries.
+#'
+#' @param region_sf An sf object defining the region of interest.
+#' @param feature_classes Character vector of feature classes. See
+#'   \code{list_osm_feature_classes()}.
+#' @param cache_dir Optional directory used for osmextract downloads and cached
+#'   combined query results.
+#' @param provider Character. OSM data provider. Default is "geofabrik".
+#' @param match_level Integer provider matching level passed to
+#'   \code{osmextract::oe_match()} and \code{osmextract::oe_get()}.
+#' @param max_download_size_mb Maximum matched extract size in MB. Set to
+#'   \code{NA} to disable the check.
+#' @param layers Character vector of osmextract layers to query.
+#' @param as_sf Logical. If TRUE, return sf objects. If FALSE, geometries are
+#'   dropped from returned layers.
+#' @param verbose Logical. If TRUE, prints progress messages.
+#'
+#' @return A named list by feature class. Each feature class contains
+#'   \code{pts}, \code{lines}, \code{poly}, and \code{multipoly} entries.
+#'
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#' library(sf)
+#' region <- st_read("region.shp")
+#'
+#' food <- get_osm_feature_class(region, "food_retail")
+#' social <- get_osm_feature_class(region, c("health_facilities", "schools"))
+#' }
+get_osm_feature_class <- function(
+  region_sf,
+  feature_classes,
+  cache_dir = NULL,
+  provider = "geofabrik",
+  match_level = 2,
+  max_download_size_mb = 1500,
+  layers = c("points", "lines", "multipolygons"),
+  as_sf = TRUE,
+  verbose = FALSE
+) {
+  stopifnot(inherits(region_sf, "sf"))
+
+  if (missing(feature_classes) || length(feature_classes) == 0) {
+    stop("feature_classes must contain at least one OSM feature class.", call. = FALSE)
+  }
+
+  catalog <- get_osm_tag_catalog()
+  feature_classes <- unique(as.character(feature_classes))
+  unknown_classes <- setdiff(feature_classes, names(catalog))
+
+  if (length(unknown_classes) > 0) {
+    stop(
+      "Unknown OSM feature class(es): ",
+      paste(unknown_classes, collapse = ", "),
+      ". Available feature classes: ",
+      paste(names(catalog), collapse = ", "),
+      call. = FALSE
+    )
+  }
+
+  selected_tag_sets <- catalog[feature_classes]
+  combined_tag_sets <- combine_osm_tag_sets(selected_tag_sets)
+
+  cache_file <- NULL
+  if (!is.null(cache_dir)) {
+    if (!dir.exists(cache_dir)) {
+      dir.create(cache_dir, recursive = TRUE, showWarnings = FALSE)
+    }
+    cache_file <- osm_cache_file(
+      region_sf = region_sf,
+      provider = provider,
+      match_level = match_level,
+      layers = layers,
+      tag_sets = combined_tag_sets,
+      cache_dir = cache_dir
+    )
+  }
+
+  if (!is.null(cache_file) && file.exists(cache_file)) {
+    if (verbose) {
+      message("Reading cached OSM feature query: ", cache_file)
+    }
+    combined_features <- readRDS(cache_file)
+  } else {
+    if (verbose) {
+      message(
+        "Fetching OSM feature classes: ",
+        paste(feature_classes, collapse = ", ")
+      )
+    }
+
+    fetch_features <- function() {
+      get_osm_features(
+        region_sf = region_sf,
+        tag_sets = combined_tag_sets,
+        verbose = verbose,
+        provider = provider,
+        match_level = match_level,
+        max_download_size_mb = max_download_size_mb,
+        layers = layers,
+        cache_dir = cache_dir
+      )
+    }
+
+    combined_features <- if (isTRUE(verbose)) {
+      fetch_features()
+    } else {
+      suppressMessages(fetch_features())
+    }
+
+    if (!is.null(cache_file)) {
+      saveRDS(combined_features, cache_file)
+    }
+  }
+
+  result <- stats::setNames(vector("list", length(feature_classes)), feature_classes)
+  for (feature_class in feature_classes) {
+    result[[feature_class]] <- filter_osm_features_by_tags(
+      combined_features,
+      catalog[[feature_class]],
+      feature_class = feature_class,
+      feature_label = osm_feature_label(feature_class)
+    )
+  }
+
+  if (!isTRUE(as_sf)) {
+    result <- lapply(result, function(feature_result) {
+      lapply(feature_result, function(layer) {
+        if (inherits(layer, "sf")) {
+          sf::st_drop_geometry(layer)
+        } else {
+          as.data.frame(layer)
+        }
+      })
+    })
+  }
+
+  result
+}
+
+
 #' Get OpenStreetMap Features
 #'
 #' @description
@@ -198,6 +630,8 @@ get_giga_schools_data <- function(
 #' @param verbose Logical. If TRUE, prints detailed progress messages. Default is FALSE.
 #' @param provider Character. OSM data provider. Options: "geofabrik" (default),
 #'   "bbbike", "openstreetmap_fr". See \code{osmextract::oe_providers()}.
+#' @param cache_dir Optional directory used for osmextract downloads and
+#'   converted files.
 #'
 #' @return A list containing:
 #'   \describe{
@@ -264,13 +698,18 @@ get_osm_features <- function(
   provider = "geofabrik",
   match_level = 2, # 2 ~ countries for geofabrik
   max_download_size_mb = 1500, # set to NA to disable the check
-  layers = c("points", "lines", "multipolygons") # which layers to query
+  layers = c("points", "lines", "multipolygons"), # which layers to query
+  cache_dir = NULL
 ) {
   stopifnot(inherits(region_sf, "sf"))
 
   # ---- Work in EPSG:4326 for osmextract ----
   region_sf <- sf::st_transform(region_sf, 4326)
   bb <- sf::st_bbox(region_sf)
+
+  if (!is.null(cache_dir) && !dir.exists(cache_dir)) {
+    dir.create(cache_dir, recursive = TRUE, showWarnings = FALSE)
+  }
 
   if (verbose) {
     message("Fetching OpenStreetMap features using osmextract...")
@@ -326,29 +765,18 @@ Refusing to download. Try:
     )
   }
 
-  # ---- Helper: empty sf ----
-  empty_min <- function() {
-    sf::st_sf(osm_id = character(), geometry = sf::st_sfc(crs = 4326))
+  max_file_size <- if (
+    !is.null(max_download_size_mb) &&
+      !is.na(max_download_size_mb)
+  ) {
+    max_download_size_mb * 1024^2
+  } else {
+    Inf
   }
 
-  # ---- Helper: Build SQL WHERE clause from tag_sets ----
-  # tag_sets = list("amenity" = c("restaurant", "cafe"), "shop" = "supermarket")
-  # -> "(amenity IN ('restaurant', 'cafe') OR shop = 'supermarket')"
-  build_where_clause <- function(tag_sets) {
-    conditions <- lapply(names(tag_sets), function(tag) {
-      values <- tag_sets[[tag]]
-      if (length(values) == 1) {
-        sprintf("%s = '%s'", tag, values)
-      } else {
-        quoted_values <- paste0("'", values, "'", collapse = ", ")
-        sprintf("%s IN (%s)", tag, quoted_values)
-      }
-    })
-    paste0("(", paste(conditions, collapse = " OR "), ")")
-  }
-
-  where_clause <- build_where_clause(tag_sets)
-  extra_tags <- unique(names(tag_sets))
+  tag_sets <- normalize_osm_tag_set(tag_sets)
+  where_clause <- build_osm_where_clause(tag_sets)
+  extra_tags <- names(tag_sets)
 
   if (verbose) {
     message("SQL WHERE clause: ", where_clause)
@@ -376,6 +804,12 @@ Refusing to download. Try:
           layer = layer_name,
           query = sql_query, # SQL runs at st_read() stage
           extra_tags = extra_tags,
+          download_directory = if (is.null(cache_dir)) {
+            osmextract::oe_download_directory()
+          } else {
+            cache_dir
+          },
+          max_file_size = max_file_size,
           quiet = !verbose,
           boundary = region_sf, # **full polygon used for clipping**
           boundary_type = "clipsrc"
@@ -397,7 +831,7 @@ Refusing to download. Try:
           if (verbose) {
             message(sprintf("  No features found in %s", layer_name))
           }
-          empty_min()
+          empty_osm_sf()
         }
       },
       error = function(e) {
@@ -408,7 +842,7 @@ Refusing to download. Try:
             conditionMessage(e)
           ))
         }
-        empty_min()
+        empty_osm_sf()
       }
     )
   }
@@ -417,28 +851,30 @@ Refusing to download. Try:
   pts <- if ("points" %in% layers) {
     query_layer("points", where_clause, extra_tags, verbose)
   } else {
-    empty_min()
+    empty_osm_sf()
   }
 
   lines <- if ("lines" %in% layers) {
     query_layer("lines", where_clause, extra_tags, verbose)
   } else {
-    empty_min()
+    empty_osm_sf()
   }
 
   poly <- if ("multipolygons" %in% layers) {
     query_layer("multipolygons", where_clause, extra_tags, verbose)
   } else {
-    empty_min()
+    empty_osm_sf()
   }
 
-  multipoly <- empty_min() # placeholder, as in your original function
+  multipoly <- empty_osm_sf() # placeholder, as in your original function
 
   total_features <- nrow(pts) + nrow(lines) + nrow(poly) + nrow(multipoly)
-  message(sprintf(
-    "✓ OSM data retrieved successfully: %d total features",
-    total_features
-  ))
+  if (verbose) {
+    message(sprintf(
+      "✓ OSM data retrieved successfully: %d total features",
+      total_features
+    ))
+  }
 
   list(pts = pts, lines = lines, poly = poly, multipoly = multipoly)
 }

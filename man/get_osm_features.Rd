@@ -11,7 +11,8 @@ get_osm_features(
   provider = "geofabrik",
   match_level = 2,
   max_download_size_mb = 1500,
-  layers = c("points", "lines", "multipolygons")
+  layers = c("points", "lines", "multipolygons"),
+  cache_dir = NULL
 )
 }
 \arguments{
@@ -24,6 +25,9 @@ get_osm_features(
 
 \item{provider}{Character. OSM data provider. Options: "geofabrik" (default),
 "bbbike", "openstreetmap_fr". See \code{osmextract::oe_providers()}.}
+
+\item{cache_dir}{Optional directory used for osmextract downloads and
+converted files.}
 }
 \value{
 A list containing:

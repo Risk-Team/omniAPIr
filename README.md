@@ -110,7 +110,7 @@ api_info <- get_api_info("FAOSTAT")
 | `get_ndc_data()` | Climate Watch - NDC Data | No | No |
 | `get_hdx_hapi_*()` | HDX Humanitarian API - HAPI | Yes (app identifier) | No |
 | `get_invasive_alien_species()` | GBIF/GRIIS - Invasive Species | No | No |
-| `get_osm_features()` | OpenStreetMap - Geographic Features | No | No |
+| `get_osm_feature_class()`, `get_osm_features()` | OpenStreetMap - Geographic Features | No | No |
 | `get_fishstat_data()` | FAO Fishstat - Fishery Statistics | No | No |
 
 ## Quick Start Examples
@@ -264,17 +264,43 @@ library(sf)
 # Define region of interest
 region <- st_read("region.shp")
 
-# Get schools and hospitals
+# Inspect available reusable OSM feature classes
+list_osm_feature_classes()
+
+# Fetch food retail locations
+food_retail <- get_osm_feature_class(
+  region_sf = region,
+  feature_classes = "food_retail",
+  cache_dir = "osm-cache"
+)
+food_retail_points <- food_retail$food_retail$pts
+
+# Fetch health facilities and schools together with one combined OSM query
+social_services <- get_osm_feature_class(
+  region_sf = region,
+  feature_classes = c("health_facilities", "schools"),
+  cache_dir = "osm-cache"
+)
+health_facilities <- social_services$health_facilities$pts
+schools <- social_services$schools$pts
+
+# Fetch livestock-related infrastructure
+livestock_services <- get_osm_feature_class(
+  region_sf = region,
+  feature_classes = c("slaughterhouses", "veterinary_services"),
+  cache_dir = "osm-cache"
+)
+slaughterhouses <- livestock_services$slaughterhouses$pts
+veterinary_services <- livestock_services$veterinary_services$pts
+
+# Low-level custom tag-based queries are still available
 osm_data <- get_osm_features(
   region_sf = region,
   tag_sets = list(
-    "amenity" = c("school", "hospital"),
-    "highway" = "primary"
+    amenity = c("school", "hospital"),
+    highway = "primary"
   )
 )
-
-# Access different geometry types
-schools_points <- osm_data$pts
 roads <- osm_data$lines
 ```
 
