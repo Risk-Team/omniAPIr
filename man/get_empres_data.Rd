@@ -7,7 +7,6 @@
 get_empres_data(
   country_iso3 = NULL,
   area = NULL,
-  animals = "All",
   disease = NULL,
   diagnosis_status = "confirmed",
   diagnosis_source = NULL,
@@ -22,9 +21,7 @@ get_empres_data(
   end_creation_date = NULL,
   start_reporting_date = NULL,
   end_reporting_date = NULL,
-  confidentiality_level = "both",
   empresi_version = "all",
-  use_lookup = TRUE,
   offset = 0,
   paginate = TRUE,
   page_size = 1000,
@@ -40,17 +37,11 @@ get_empres_data(
 \item{area}{Character vector. Country names or geographic groupings accepted by the
 EMPRES public API. If supplied, this is used instead of \code{country_iso3}.}
 
-\item{animals}{Character vector. Animal type(s) or disease code(s). Accepts common names
-like "cattle", "pigs", and "chicken", or disease shortcuts like "fmd".
-This argument is kept for backward compatibility and expands to disease filters.
-Use \code{specie}, \code{specie_type}, and \code{specie_class} for species filters.}
-
 \item{disease}{Character vector. Disease names, or disease/subtype values using the
-public API separator \code{" -- "}. If supplied, this overrides \code{animals}.}
+public API separator \code{" -- "}. Default is NULL.}
 
 \item{diagnosis_status}{Character vector. Diagnosis status filter. Accepted values are
-"confirmed", "denied", "suspected", and "tentative"; "both" maps to confirmed,
-suspected, and tentative for backward compatibility. Default is "confirmed".}
+"confirmed", "denied", "suspected", and "tentative". Default is "confirmed".}
 
 \item{diagnosis_source}{Character vector. Diagnosis source labels. Default is NULL.}
 
@@ -73,12 +64,7 @@ observation-date bounds; "0" does not. Default is "0".}
 
 \item{start_reporting_date, end_reporting_date}{Character date bounds in YYYY-MM-DD format.}
 
-\item{confidentiality_level}{Deprecated. Ignored by the public API.}
-
 \item{empresi_version}{Character. EMPRES-i version: "all", "1", or "0". Default is "all".}
-
-\item{use_lookup}{Logical. Whether to use built-in lookup tables for animals and diseases.
-Default is TRUE.}
 
 \item{offset}{Integer. Starting offset for API pagination. Default is 0.}
 
@@ -108,23 +94,15 @@ for Animal Health (EMPRES-i) public API.
 \details{
 API Documentation: \url{https://fao-empp-data-explorer-be-51851897723.europe-west1.run.app/api/docs}
 
-The function supports animal names and disease shortcuts when use_lookup=TRUE:
-\itemize{
-  \item Animals: cattle, pigs, chicken, sheep, goats, horses, buffalo, camels, etc.
-  \item Disease shortcuts: fmd, asf, ai, ppr, ahs, newcastle, rabies, anthrax, etc.
-}
-
 The public API does not expose a field-selection parameter. The function requests the
 endpoint's default fields and returns them as supplied by the API.
+
+Disease values, species values, species types, and species classes are validated locally against
+the public filter metadata before the API request is sent. Invalid values raise
+an error listing the supported values.
 }
 \examples{
 \dontrun{
-# Get cattle-related disease data for Kenya
-empres_data <- get_empres_data(
-  country_iso3 = "KEN",
-  animals = "cattle"
-)
-
 # Get specific disease data
 fmd_data <- get_empres_data(
   country_iso3 = "KEN",

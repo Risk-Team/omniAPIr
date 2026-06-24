@@ -240,16 +240,12 @@ wb_data <- get_wb_data(
 # Set once for the public API
 Sys.setenv(EMPRES_API_KEY = "your_api_key")
 
-# Get cattle-related disease outbreak data for Kenya
+# Get domestic cattle events for Kenya
 empres_data <- get_empres_data(
   country_iso3 = "KEN",
-  animals = "cattle"  # Backward-compatible disease expansion
-)
-
-# Multiple animal types
-empres_data <- get_empres_data(
-  country_iso3 = "ETH",
-  animals = c("cattle", "sheep", "goats")
+  specie = "Cattle",
+  specie_type = "Domestic",
+  specie_class = "Mammal"
 )
 
 # Get specific disease data
@@ -258,13 +254,11 @@ fmd_data <- get_empres_data(
   disease = "Foot and mouth disease"
 )
 
-# Use the new species filter
-cattle_events <- get_empres_data(
-  country_iso3 = "KEN",
-  specie = "Cattle",
-  specie_type = "Domestic",
-  specie_class = "Mammal"
-)
+# Invalid disease names fail before the API call and list supported values
+get_empres_data(disease = "fake disease")
+
+# Invalid species values do the same
+get_empres_data(specie = "fake species")
 ```
 
 ### OpenStreetMap - Geographic Features
@@ -330,9 +324,9 @@ ilo_data <- get_ilo_data(
 )
 ```
 
-### 2. Built-in Lookup Tables
+### 2. Built-in Lookup Tables and Validated Filters
 
-FAOSTAT and EMPRES functions include friendly name lookups:
+FAOSTAT includes friendly name lookups. EMPRES validates public API filter values before requesting data:
 
 ```r
 # FAOSTAT crops
@@ -341,8 +335,9 @@ get_faostat_data(element = "2413", item = "wheat", database = "QCL")
 # FAOSTAT animals
 get_faostat_data(element = "2111", item = c("cattle", "sheep", "goats"), database = "QCL")
 
-# EMPRES disease shortcuts
-get_empres_data(country_iso3 = "KEN", animals = "fmd")  # Foot and mouth disease
+# EMPRES public API species and disease filters
+get_empres_data(country_iso3 = "KEN", specie = "Cattle", specie_type = "Domestic")
+get_empres_data(country_iso3 = "KEN", disease = "Foot and mouth disease")
 ```
 
 ### 3. Automatic Pagination

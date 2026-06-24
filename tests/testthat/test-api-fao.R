@@ -2,9 +2,9 @@
 test_that("EMPRES species helper builds public API tag tuples", {
     expect_equal(
         omniAPIr:::.empres_species_filter(
-            specie = "Cattle",
-            specie_type = "Domestic",
-            specie_class = "Mammal"
+            specie = "cattle",
+            specie_type = "domestic",
+            specie_class = "mammal"
         ),
         "<type:Domestic><class:Mammal><specie:Cattle>"
     )
@@ -18,6 +18,16 @@ test_that("EMPRES species helper builds public API tag tuples", {
     )
 
     expect_equal(
+        omniAPIr:::.empres_species_filter("<type:domestic><class:mammal><specie:cattle>"),
+        "<type:Domestic><class:Mammal><specie:Cattle>"
+    )
+
+    expect_equal(
+        omniAPIr:::.empres_species_filter("All"),
+        "<all>"
+    )
+
+    expect_equal(
         omniAPIr:::.empres_species_filter("<all>"),
         "<all>"
     )
@@ -27,6 +37,35 @@ test_that("EMPRES public API key requirement is explicit before network calls", 
     expect_error(
         get_empres_data(api_key = NA_character_),
         "requires an X-API-Key"
+    )
+})
+
+test_that("EMPRES validates disease values before network calls", {
+    expect_error(
+        get_empres_data(disease = "Not a real disease"),
+        "Supported disease values"
+    )
+
+    expect_equal(
+        omniAPIr:::.empres_validate_disease("foot and mouth disease -- O"),
+        "Foot and mouth disease -- O"
+    )
+})
+
+test_that("EMPRES validates species type and class values", {
+    expect_error(
+        get_empres_data(specie = "Not a real species"),
+        "Supported values are"
+    )
+
+    expect_error(
+        omniAPIr:::.empres_species_filter(specie = "Cattle", specie_type = "Farmed"),
+        "Supported values are: Captive, Domestic, Environmental sample, Wild"
+    )
+
+    expect_error(
+        omniAPIr:::.empres_species_filter(specie = "Cattle", specie_class = "Livestock"),
+        "Supported values are: Arthropod, Birds, Environmental sample, Fish, Mammal, Reptiles"
     )
 })
 

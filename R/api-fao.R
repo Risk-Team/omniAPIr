@@ -1226,19 +1226,324 @@ get_fao_fra_data <- function(
   unname(countries)
 }
 
+.empres_valid_diseases <- function() {
+  c(
+    "African horse sickness",
+    "African swine fever",
+    "Akabane Disease",
+    "Alaskapox virus",
+    "American foulbrood of honey bees",
+    "Anthrax",
+    "Arena virus",
+    "Argentine hemorrhagic fever (Junin virus)",
+    "Atkinsiella spp",
+    "Aujeszky's disease",
+    "Avian chlamydiosis",
+    "Avian infectious bronchitis",
+    "Avian infectious laryngotracheitis",
+    "Avian mycoplasmosis (M. gallisepticum)",
+    "Avian mycoplasmosis (M. synoviae)",
+    "Babesia spp",
+    "Blackleg",
+    "Bluetongue",
+    "Botulism",
+    "Bovine anaplasmosis",
+    "Bovine babesiosis",
+    "Bovine genital campylobacteriosis",
+    "Bovine spongiform encephalopathy",
+    "Bovine tuberculosis",
+    "Bovine viral diarrhoea",
+    "Brucellosis",
+    "Brucellosis (Brucella abortus)",
+    "Brucellosis (Brucella melitensis)",
+    "Brucellosis (Brucella suis)",
+    "Camelpox",
+    "Caprine arthritis/encephalitis",
+    "Chronic respiratory disease",
+    "Classical swine fever",
+    "Colibacillosis",
+    "Contagious agalactia",
+    "Contagious bovine pleuropneumonia",
+    "Contagious caprine pleuropneumonia",
+    "Contagious Ecthyma",
+    "Contagious equine metritis",
+    "COVID-19 (SARS-COV-2)",
+    "Crimean Congo haemorrhagic fever",
+    "Dourine",
+    "Duck virus enteritis",
+    "Duck virus hepatitis",
+    "East Coast fever",
+    "Ebola Virus",
+    "Ebola-Reston",
+    "Echinococcosis/hydatidosis",
+    "Enterotoxemia",
+    "Enzootic abortion of ewes (ovine chlamydiosis)",
+    "Enzootic bovine leukosis",
+    "Epizootic haemorrhagic disease",
+    "Epizootic ulcerative syndrome",
+    "Equine encephalomyelitis (Eastern)",
+    "Equine encephalomyelitis (Western)",
+    "Equine infectious anaemia",
+    "Equine piroplasmosis",
+    "Equine rhinopneumonitis",
+    "Equine viral arteritis",
+    "European foulbrood of honey bees",
+    "Foot and mouth disease",
+    "Fowl cholera",
+    "Fowl typhoid",
+    "Glanders",
+    "Haemorrhagic Septicaemia",
+    "Heartwater",
+    "Hendra Virus Disease",
+    "Infectious bovine rhinotracheitis",
+    "Infectious Bronchitis",
+    "Infectious bursal disease (Gumboro disease)",
+    "Influenza - Avian",
+    "Influenza - Equine",
+    "Intoxication",
+    "Japanese Encephalitis",
+    "Kunjin virus",
+    "Kyasanur forest disease",
+    "Leishmaniosis",
+    "Leprosy (Hansen's disease)",
+    "Leptospirosis",
+    "Lumpy skin disease",
+    "Maedi-visna",
+    "Malignant catarrhal fever",
+    "Marburg Hemorrhagic Fever",
+    "Marek's disease",
+    "MERS-CoV",
+    "Monkey Pox",
+    "Myxomatosis",
+    "New world screwworm (Cochliomyia hominivorax)",
+    "Newcastle disease",
+    "Nipah virus encephalitis",
+    "Old world screwworm (Chrysomya bezziana)",
+    "Oropouche fever",
+    "Other bacterial diseases",
+    "Ovine epididymitis (Brucella ovis)",
+    "Paratuberculosis",
+    "Pasteurellosis",
+    "Peste des petits ruminants",
+    "Poliovirus",
+    "Porcine cysticercosis",
+    "Porcine epidemic diarrhea",
+    "Porcine reproductive and respiratory syndrome",
+    "Psittacosis(Chlamydophila psittaci)",
+    "Pullorum disease",
+    "Q fever",
+    "Rabbit haemorrhagic disease",
+    "Rabies",
+    "Rift Valley fever",
+    "Rinderpest",
+    "Salmonellosis (S. abortusovis)",
+    "Schmallenberg",
+    "Scrapie",
+    "Sheep pox and goat pox",
+    "Small hive beetle infestation (Aethina tumida)",
+    "Starvation",
+    "Strangles",
+    "Streptococcus suis",
+    "Surra (Trypanosoma evansi)",
+    "Swine influenza",
+    "Swine Novel Enteric Corona Virus disease",
+    "Swine vesicular disease",
+    "Teschovirus encephalomyelitis",
+    "Theileriosis",
+    "Tick-borne encephalitis",
+    "Transmissible gastroenteritis",
+    "Trichinellosis",
+    "Trypanosomosis (tsetse-transmitted)",
+    "Tuberculosis",
+    "Tularemia",
+    "Turkey rhinotracheitis",
+    "Unknown disease",
+    "Varroa mites",
+    "Varroosis of honey bees",
+    "Venezuelan equine encephalomyelitis",
+    "Vesicular stomatitis",
+    "Viral Haemorrhagic Fevers",
+    "West Nile Fever",
+    "Western equine encephalomyelitis",
+    "Yellow fever",
+    "Yezo virus"
+  )
+}
+
+.empres_validate_disease <- function(disease) {
+  if (is.null(disease) || length(disease) == 0) {
+    return(disease)
+  }
+
+  if (length(disease) == 1 && identical(tolower(disease), "all")) {
+    return("All")
+  }
+
+  valid_diseases <- .empres_valid_diseases()
+  canonical <- character(length(disease))
+  invalid <- character()
+
+  for (i in seq_along(disease)) {
+    value <- disease[[i]]
+    parts <- strsplit(value, " -- ", fixed = TRUE)[[1]]
+    disease_name <- parts[[1]]
+    match_idx <- match(tolower(disease_name), tolower(valid_diseases))
+
+    if (is.na(match_idx)) {
+      invalid <- c(invalid, value)
+    } else {
+      canonical[[i]] <- paste(c(valid_diseases[[match_idx]], parts[-1]), collapse = " -- ")
+    }
+  }
+
+  if (length(invalid) > 0) {
+    stop(
+      "Invalid EMPRES disease value(s): ",
+      paste(invalid, collapse = ", "),
+      "\nSupported disease values are: ",
+      paste(valid_diseases, collapse = ", "),
+      call. = FALSE
+    )
+  }
+
+  canonical
+}
+
+.empres_validate_values <- function(values, valid_values, argument) {
+  if (is.null(values) || length(values) == 0) {
+    return(values)
+  }
+
+  canonical <- valid_values[match(tolower(values), tolower(valid_values))]
+  invalid <- values[is.na(canonical)]
+  if (length(invalid) > 0) {
+    stop(
+      "Invalid `", argument, "` value(s): ",
+      paste(invalid, collapse = ", "),
+      "\nSupported values are: ",
+      paste(valid_values, collapse = ", "),
+      call. = FALSE
+    )
+  }
+
+  unname(canonical)
+}
+
+.empres_species_metadata_path <- function() {
+  path <- system.file(
+    "extdata",
+    "FILTERS_SPECIE_VALUES.md",
+    package = "omniAPIr",
+    mustWork = FALSE
+  )
+  if (!nzchar(path)) {
+    path <- file.path("inst", "extdata", "FILTERS_SPECIE_VALUES.md")
+  }
+  if (!file.exists(path)) {
+    stop("EMPRES species metadata file not found.", call. = FALSE)
+  }
+  path
+}
+
+.empres_valid_species_metadata <- function() {
+  lines <- readLines(.empres_species_metadata_path(), warn = FALSE)
+  sections <- list(type = character(), class = character(), specie = character())
+  current_section <- NULL
+
+  for (line in lines) {
+    if (identical(line, "## `type` Values")) {
+      current_section <- "type"
+    } else if (identical(line, "## `class` Values")) {
+      current_section <- "class"
+    } else if (identical(line, "## `specie` Values")) {
+      current_section <- "specie"
+    } else if (!is.null(current_section) && grepl("^- ", line)) {
+      sections[[current_section]] <- c(sections[[current_section]], sub("^- ", "", line))
+    }
+  }
+
+  sections
+}
+
+.empres_validate_species_values <- function(species) {
+  if (is.null(species) || length(species) == 0) {
+    return(species)
+  }
+
+  if (any(tolower(species) == "all")) {
+    return("All")
+  }
+
+  valid_species <- .empres_valid_species_metadata()$specie
+  .empres_validate_values(species, valid_species, "specie")
+}
+
+.empres_parse_species_tuple <- function(tuple) {
+  matches <- gregexpr("<(type|class|specie):([^>]*)>", tuple, perl = TRUE)
+  tags <- regmatches(tuple, matches)[[1]]
+  if (length(tags) == 0) {
+    stop("Invalid EMPRES species tuple: ", tuple, call. = FALSE)
+  }
+
+  result <- list(type = NULL, class = NULL, specie = NULL)
+  for (tag in tags) {
+    key <- sub("^<([^:]+):.*>$", "\\1", tag)
+    value <- sub("^<[^:]+:([^>]*)>$", "\\1", tag)
+    result[[key]] <- value
+  }
+
+  result
+}
+
 .empres_species_filter <- function(specie = NULL, specie_type = NULL, specie_class = NULL) {
   if (is.null(specie) && is.null(specie_type) && is.null(specie_class)) {
     return(NULL)
   }
 
-  if (!is.null(specie) && any(tolower(specie) == "all")) {
+  if (!is.null(specie) && any(tolower(specie) %in% c("all", "<all>", "<type:all>", "<specie:all>"))) {
     return("<all>")
   }
 
   has_tuple <- !is.null(specie) && all(grepl("^<", specie))
   if (has_tuple && is.null(specie_type) && is.null(specie_class)) {
-    return(.empres_collapse_filter(specie))
+    tuples <- unlist(strsplit(specie, ",", fixed = TRUE), use.names = FALSE)
+    tuples <- trimws(tuples)
+    metadata <- .empres_valid_species_metadata()
+
+    canonical_tuples <- vapply(tuples, function(tuple) {
+      parsed <- .empres_parse_species_tuple(tuple)
+      type <- .empres_validate_values(parsed$type, metadata$type, "specie_type")
+      class <- .empres_validate_values(parsed$class, metadata$class, "specie_class")
+      species <- .empres_validate_values(parsed$specie, metadata$specie, "specie")
+
+      parts <- character()
+      if (!is.null(type)) {
+        parts <- c(parts, paste0("<type:", type, ">"))
+      }
+      if (!is.null(class)) {
+        parts <- c(parts, paste0("<class:", class, ">"))
+      }
+      if (!is.null(species)) {
+        parts <- c(parts, paste0("<specie:", species, ">"))
+      }
+      paste0(parts, collapse = "")
+    }, character(1))
+
+    return(.empres_collapse_filter(canonical_tuples))
   }
+
+  metadata <- .empres_valid_species_metadata()
+  specie_type <- .empres_validate_values(
+    specie_type,
+    metadata$type,
+    "specie_type"
+  )
+  specie_class <- .empres_validate_values(
+    specie_class,
+    metadata$class,
+    "specie_class"
+  )
+  specie <- .empres_validate_species_values(specie)
 
   lengths <- c(length(specie %||% character()), length(specie_type %||% character()), length(specie_class %||% character()))
   lengths <- lengths[lengths > 0]
@@ -1295,15 +1600,10 @@ get_fao_fra_data <- function(
 #' @param country_iso3 Character. ISO3 country code. Default is NULL (all countries).
 #' @param area Character vector. Country names or geographic groupings accepted by the
 #'   EMPRES public API. If supplied, this is used instead of \code{country_iso3}.
-#' @param animals Character vector. Animal type(s) or disease code(s). Accepts common names
-#'   like "cattle", "pigs", and "chicken", or disease shortcuts like "fmd".
-#'   This argument is kept for backward compatibility and expands to disease filters.
-#'   Use \code{specie}, \code{specie_type}, and \code{specie_class} for species filters.
 #' @param disease Character vector. Disease names, or disease/subtype values using the
-#'   public API separator \code{" -- "}. If supplied, this overrides \code{animals}.
+#'   public API separator \code{" -- "}. Default is NULL.
 #' @param diagnosis_status Character vector. Diagnosis status filter. Accepted values are
-#'   "confirmed", "denied", "suspected", and "tentative"; "both" maps to confirmed,
-#'   suspected, and tentative for backward compatibility. Default is "confirmed".
+#'   "confirmed", "denied", "suspected", and "tentative". Default is "confirmed".
 #' @param diagnosis_source Character vector. Diagnosis source labels. Default is NULL.
 #' @param has_human_affected Character. Public API human affected filter: "0" for no
 #'   filter, "1" for no affected humans flag, or "2" for affected humans flag.
@@ -1317,9 +1617,6 @@ get_fao_fra_data <- function(
 #' @param start_creation_date,end_creation_date Character date bounds in YYYY-MM-DD format.
 #' @param start_reporting_date,end_reporting_date Character date bounds in YYYY-MM-DD format.
 #' @param empresi_version Character. EMPRES-i version: "all", "1", or "0". Default is "all".
-#' @param confidentiality_level Deprecated. Ignored by the public API.
-#' @param use_lookup Logical. Whether to use built-in lookup tables for animals and diseases.
-#'   Default is TRUE.
 #' @param offset Integer. Starting offset for API pagination. Default is 0.
 #' @param paginate Logical. Whether to continue requesting pages until the API returns fewer
 #'   than \code{page_size} records. Default is TRUE.
@@ -1337,42 +1634,36 @@ get_fao_fra_data <- function(
 #' @details
 #' API Documentation: \url{https://fao-empp-data-explorer-be-51851897723.europe-west1.run.app/api/docs}
 #'
-#' The function supports animal names and disease shortcuts when use_lookup=TRUE:
-#' \itemize{
-#'   \item Animals: cattle, pigs, chicken, sheep, goats, horses, buffalo, camels, etc.
-#'   \item Disease shortcuts: fmd, asf, ai, ppr, ahs, newcastle, rabies, anthrax, etc.
-#' }
-#'
 #' The public API does not expose a field-selection parameter. The function requests the
 #' endpoint's default fields and returns them as supplied by the API.
+#'
+#' Disease values, species values, species types, and species classes are validated locally against
+#' the public filter metadata before the API request is sent. Invalid values raise
+#' an error listing the supported values.
 #'
 #' @export
 #'
 #' @examples
 #' \dontrun{
-#' # Get cattle disease data for Kenya
-#' empres_data <- get_empres_data(
-#'   country_iso3 = "KEN",
-#'   animals = "cattle"
-#' )
-#'
 #' # Get specific disease data
 #' fmd_data <- get_empres_data(
 #'   country_iso3 = "KEN",
-#'   animals = "fmd"
+#'   disease = "Foot and mouth disease"
 #' )
 #'
-#' # Get data with verbose output
-#' empres_data <- get_empres_data(
+#' # Get domestic cattle events observed in 2025
+#' cattle_events <- get_empres_data(
 #'   country_iso3 = "KEN",
-#'   animals = c("cattle", "pigs"),
-#'   verbose = TRUE
+#'   specie = "Cattle",
+#'   specie_type = "Domestic",
+#'   specie_class = "Mammal",
+#'   start_observation_date = "2025-01-01",
+#'   end_observation_date = "2025-12-31"
 #' )
 #' }
 get_empres_data <- function(
   country_iso3 = NULL,
   area = NULL,
-  animals = "All",
   disease = NULL,
   diagnosis_status = "confirmed",
   diagnosis_source = NULL,
@@ -1387,9 +1678,7 @@ get_empres_data <- function(
   end_creation_date = NULL,
   start_reporting_date = NULL,
   end_reporting_date = NULL,
-  confidentiality_level = "both",
   empresi_version = "all",
-  use_lookup = TRUE,
   offset = 0,
   paginate = TRUE,
   page_size = 1000,
@@ -1399,14 +1688,6 @@ get_empres_data <- function(
   max_retries = 3
 ) {
   base <- "https://fao-empp-data-explorer-be-51851897723.europe-west1.run.app/api/events"
-
-  if (is.null(api_key) || length(api_key) != 1 || is.na(api_key) || !nzchar(api_key)) {
-    stop(
-      "The EMPRES public API currently requires an X-API-Key header. ",
-      "Set EMPRES_API_KEY or pass api_key.",
-      call. = FALSE
-    )
-  }
 
   if (length(offset) != 1 || is.na(offset) || offset < 0) {
     stop("`offset` must be a single non-negative integer.", call. = FALSE)
@@ -1418,143 +1699,13 @@ get_empres_data <- function(
     stop("`max_records` must be a single positive number or Inf.", call. = FALSE)
   }
 
-  if (!identical(confidentiality_level, "both")) {
-    warning("`confidentiality_level` is ignored by the EMPRES public API.", call. = FALSE)
-  }
-
   if (!is.null(area)) {
     area_name <- area
-  } else if (use_lookup) {
-    area_name <- .empres_country_names(country_iso3)
   } else {
-    area_name <- country_iso3
+    area_name <- .empres_country_names(country_iso3)
   }
 
-  if (is.null(disease) && use_lookup && is.character(animals) && !all(animals == "All")) {
-    animal_diseases <- list(
-      "cattle" = c(
-        "Foot and mouth disease",
-        "Bovine tuberculosis",
-        "Brucellosis",
-        "Anthrax",
-        "Rabies",
-        "Rift Valley fever",
-        "Bovine spongiform encephalopathy",
-        "Contagious bovine pleuropneumonia",
-        "Lumpy skin disease",
-        "Theileriosis",
-        "Trypanosomosis (tsetse-transmitted)"
-      ),
-      "pigs" = c(
-        "African swine fever",
-        "Classical swine fever",
-        "Porcine reproductive and respiratory syndrome",
-        "Porcine epidemic diarrhea",
-        "Swine vesicular disease",
-        "Nipah virus encephalitis",
-        "Japanese Encephalitis"
-      ),
-      "chicken" = c(
-        "Influenza - Avian",
-        "Newcastle disease",
-        "Infectious bursal disease",
-        "Marek's disease",
-        "Infectious Bronchitis",
-        "Avian infectious laryngotracheitis",
-        "Fowl cholera",
-        "Fowl typhoid"
-      ),
-      "sheep" = c(
-        "Peste des petits ruminants",
-        "Sheep pox and goat pox",
-        "Contagious caprine pleuropneumonia",
-        "Brucellosis",
-        "Anthrax",
-        "Rabies",
-        "Scrapie",
-        "Foot and mouth disease"
-      ),
-      "goats" = c(
-        "Peste des petits ruminants",
-        "Contagious caprine pleuropneumonia",
-        "Brucellosis",
-        "Anthrax",
-        "Rabies",
-        "Foot and mouth disease",
-        "Caprine arthritis/encephalitis"
-      ),
-      "horses" = c(
-        "African horse sickness",
-        "Influenza - Equine",
-        "Equine rhinopneumonitis",
-        "Equine infectious anaemia",
-        "Glanders",
-        "Venezuelan equine encephalomyelitis",
-        "West Nile Fever"
-      ),
-      "aquaculture" = c(
-        "Epizootic ulcerative syndrome"
-      ),
-      "bees" = c(
-        "Varroosis of honey bees",
-        "American foulbrood of honey bees",
-        "European foulbrood of honey bees",
-        "Small hive beetle infestation"
-      ),
-      "buffalo" = c(
-        "Foot and mouth disease",
-        "Bovine tuberculosis",
-        "Brucellosis",
-        "Anthrax",
-        "Rift Valley fever",
-        "Theileriosis"
-      ),
-      "camels" = c(
-        "MERS-CoV",
-        "Rift Valley fever",
-        "Camelpox",
-        "Surra (Trypanosoma evansi)",
-        "Brucellosis"
-      ),
-      "deer" = c(
-        "Bovine tuberculosis",
-        "Foot and mouth disease",
-        "Brucellosis",
-        "Anthrax"
-      ),
-      "fmd" = "Foot and mouth disease",
-      "asf" = "African swine fever",
-      "ai" = "Influenza - Avian",
-      "ppr" = "Peste des petits ruminants",
-      "ahs" = "African horse sickness",
-      "newcastle" = "Newcastle disease",
-      "rabies" = "Rabies",
-      "anthrax" = "Anthrax",
-      "brucellosis" = "Brucellosis",
-      "tuberculosis" = "Bovine tuberculosis",
-      "covid" = "COVID-19 (SARS-COV-2)"
-    )
-
-    invalid_animals <- animals[!animals %in% names(animal_diseases)]
-    if (length(invalid_animals) > 0) {
-      valid_options <- paste(names(animal_diseases), collapse = ", ")
-      stop(
-        "Invalid animal(s): ",
-        paste(invalid_animals, collapse = ", "),
-        "\nValid options are: ",
-        valid_options,
-        call. = FALSE
-      )
-    }
-
-    disease <- unique(unlist(animal_diseases[animals], use.names = FALSE))
-  } else if (is.null(disease)) {
-    disease <- if (all(animals == "All")) "All" else animals
-  }
-
-  if (length(diagnosis_status) == 1 && identical(tolower(diagnosis_status), "both")) {
-    diagnosis_status <- c("confirmed", "suspected", "tentative")
-  }
+  disease <- .empres_validate_disease(disease)
 
   valid_status <- c("confirmed", "denied", "suspected", "tentative")
   invalid_status <- setdiff(tolower(diagnosis_status), valid_status)
@@ -1592,7 +1743,7 @@ get_empres_data <- function(
   )
   params <- params[!vapply(params, is.null, logical(1))]
 
-  for (date_param in names(params)[grepl("_(observation|creation|reporting)_date$", names(params))]) {
+  for (date_param in names(params)[grepl("^(start|end)_(observation|creation|reporting)_date$", names(params))]) {
     date_value <- params[[date_param]]
     if (length(date_value) != 1 || !grepl("^\\d{4}-\\d{2}-\\d{2}$", date_value)) {
       stop("`", date_param, "` must use YYYY-MM-DD format.", call. = FALSE)
@@ -1604,6 +1755,14 @@ get_empres_data <- function(
   }
   if (length(include_reporting_date) != 1 || !as.character(include_reporting_date) %in% c("0", "1")) {
     stop("`include_reporting_date` must be one of: 0, 1.", call. = FALSE)
+  }
+
+  if (is.null(api_key) || length(api_key) != 1 || is.na(api_key) || !nzchar(api_key)) {
+    stop(
+      "The EMPRES public API currently requires an X-API-Key header. ",
+      "Set EMPRES_API_KEY or pass api_key.",
+      call. = FALSE
+    )
   }
 
   if (verbose) {

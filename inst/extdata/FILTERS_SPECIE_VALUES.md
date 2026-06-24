@@ -1,0 +1,587 @@
+# Public `specie` Values
+
+## `type` Values
+
+- Captive
+- Domestic
+- Environmental sample
+- Wild
+
+## `class` Values
+
+- Arthropod
+- Birds
+- Environmental sample
+- Fish
+- Mammal
+- Reptiles
+
+## `specie` Values
+
+- Accipiter gentilis
+- Accipitridae (incognita)
+- Accipitridae (unidentified):Accipitridae (incognita)(Accipitridae)
+- Adélie penguin (Pygoscelis adeliae)
+- African black Oystercatcher (Haematopus moquini)
+- African Buffalo
+- African fish eagle (Haliaeetus vocifer)
+- African masked weaver (Ploceus velatus)
+- African penguin (Spheniscus demersus)
+- African sacred ibis (Threskiornis aethiopicus)
+- Alpaca
+- American badger
+- American black bear (Ursus americanus)
+- American crow (Corvus brachyrhynchos)
+- American Green-winged teal
+- American Oystercatcher
+- American White Pelican (Pelecanus erythrorhynchos):Pelecanidae-Phaethontiformes
+- American wigeon
+- Amur leopard (Panthera pardus orientalis)
+- Amur Tiger
+- Anatidae (incognita)
+- Ancient murrelet (Synthliboramphus antiquus)
+- Andean goose (Chloephaga melanoptera)
+- Anserinae (unidentified):Anserinae (incognita)(Anatidae)
+- Antelope
+- Antillean manatee (Trichecus manatus manatus)
+- Apis mellifera litorea
+- Arctic skua (or parasitic jaeger)
+- Arctic tern (Sterna paradisea)
+- Ardeidae (unspecified)
+- Ardeidae: bittern / egret / heron
+- Argali (Ovis ammon)
+- Armenian gull (Larus armenicus)
+- Asian Openbill
+- Asiatic golden cat (Catopuma temminckii)
+- Atlantic puffin (Fratercula arctica)
+- Baboon
+- Badger
+- Bald Eagle (Haliaeetus leucocephalus)
+- Banteng (Bos javanicus)
+- Bar-headed goose
+- Barn owl (Tyto alba)
+- Barn Swallow
+- Barnacle Goose:Branta leucopsis(Anatidae)
+- Barred owl (Strix varia)
+- Bat
+- Bean goose (Anser fabalis)
+- Bearded vulture (Gypaetus barbatus)
+- Beaver (Castor)
+- Beech marten
+- Bees (hives)
+- Bharal
+- Big hairy armadillos (Chaetophractus villosus)
+- Bison
+- Black backed gull (Larus marinus)
+- Black Guillemot (Cepphus grylle)
+- Black Guillemot (Cepphus grylle):Alcidae-Charadriiformes
+- Black headed gull (Chroicocephalus ridibundus)
+- Black rat (Rattus rattus)
+- Black Skimmer
+- Black stork (Ciconia nigra)
+- Black Swan:Cygnus atratus(Anatidae)
+- Black vulture (Coragyps atratus)
+- Black wildebeest (Connochaetes gnou)
+- Black-and-white ruffed lemur (Varecia variegata)
+- Black-billed Magpie (Pica hudsonia):Corvidae-Passeriformes
+- Black-browed albatross (Thalassarche melanophris)
+- Black-cappedChickadee
+- Black-chested buzzard-eagle (Geranoaetus melanoleucus)
+- Black-faced spoonbill (Platalea minor)
+- Black-footed ferret
+- Black-headed heron (Ardea melanocephala)
+- Black-legged Kittiwake (Rissa tridactyla):Laridae-Charadriiformes
+- Black-necked Grebe (Podiceps nigricollis):Podicipedidae-Procellariiformes
+- Black-necked swan (Cygnus melancoryphus)
+- Black-tailed Jackrabbit (Lepus californicus)
+- Black-tailed marmoset (Mico melanurus)
+- Black-winged Stilt
+- Blue crane (Grus paradisea)
+- Blue winged teal (Anas discors):Anatidae-Anseriformes
+- Blue-footed booby (Sula nebouxii)
+- Blue-fronted amazon (Amazona aestiva)
+- Bobcat (Lynx rufus)
+- Bontebok
+- Bornean binturong (Arctictis binturong)
+- Bottlenose dolphin (Tursiops truncatus)
+- Brent Goose:Branta bernicla(Anatidae)
+- Brown Booby (Sula leucogaster)
+- Brown Hare
+- Brown headed gull
+- Brown pelican (Pelecanus occidentalis)
+- Brown skua (Stercorarius antarcticus)
+- Brown-headed gull (Chroicocephalus brunnicephalus)
+- Brown-hooded gull (Chroicocephalus maculipennis)
+- Bubo scandiacus (Snowy Owl) - Strigidae
+- Buffaloe
+- Buffaloes
+- Burmeister's porpoise (Phocoena spinipinnis)
+- Buzzard
+- Cabot's tern (Thalasseus acuflavidus)
+- Cackling goose (Branta hutchinsii)
+- Camelidae (unidentified)
+- Canada Goose:Branta canadensis(Anatidae)
+- Canada lynx (Lynx canadensis)
+- Canine
+- Cape cormorant (Phalacrocorax capensis)
+- Cape fur seal (Arctocephalus pusillus)
+- Cape gannet (Morus capensis)
+- Cape gannet Shy albatross
+- Captive cattle egrets
+- Caracal (Caracal caracal)
+- Carrion crow (Corvus corone)
+- Casmerodiu
+- Caspian gull (Larus cachinnans)
+- Caspian seal (Pusa caspica)
+- Caspian tern (Hydroprogne caspia)
+- Cats
+- Cattle
+- Cattle egret
+- Cervidae
+- Charadriidae (unidentified):Charadriidae (incognita)(Charadriidae)
+- Charadrius pallidus
+- Cheetah
+- Chicken
+- Chilean dolphin (Cephalorhynchus eutropia),
+- Chilean flamingo (Phoenicopterus chilensis)
+- Chimpanzee (Pan troglodytes)
+- Ciconiidae (unidentified):Ciconiidae(incognita)(Ciconiidae)
+- Cinnamon Teal
+- Civet
+- Coati (Gen. Nasua)
+- Cockatiel
+- Columbidae (unidentified):Columbidae (incognita)(Columbidae)
+- Common coot
+- Common dolphin (Delphinus delphis)
+- Common duiker (Sylvicapra grimmia)
+- Common Eider (Somateria mollissima)
+- Common Goldeneye:Bucephala clangula(Anatidae)
+- Common Grackle
+- Common Kestrel:Falco tinnunculus(Falconidae)
+- Common loon (Gavia immer)
+- Common mina
+- Common moorhen (Gallinula chloropus)
+- Common murre (Uria aalge)
+- Common pheasant (Phasianus colchicus)
+- Common pochard (Aythya ferina)
+- Common Quail:Coturnix coturnix(Phasianidae)
+- Common raccoon (Procyon lotor)
+- Common Raven (Corvus corax)
+- Common Redshank
+- Common ringed plover
+- Common shelduck (Tadorna tadorna)
+- Common snipe
+- Common Tern (Sterna hirundo)
+- Common wood pigeon
+- Common Wood-Pigeon:Columba palumbus(Columbidae)
+- Condor
+- Cooper's hawk (Accipiter cooperii)
+- Cormorant
+- Corn crake
+- Corvidae (incognita)
+- Corvus brachyrhynchos: (Corvidae) American crow
+- Cougar (Puma concolor)
+- Coyote (Canis latrans)
+- Crabeater seal (Lobodon carcinophaga)
+- Crane
+- Crested auklet (Aethia cristatella)
+- Crested goshawk
+- Crested myna
+- Crested serpent eagle (Spilornis cheela)
+- Crow
+- Crowned cormorant (Microcarbo coronatus)
+- Curlew
+- Dalmatian pelican (Pelecanus crispus)
+- Dama gazelle
+- Daubeton's bat
+- Deer
+- Desert Cottontail (Sylvilagus audubonii)
+- Dogs
+- Dolphin gull (Leucophaeus scoresbii)
+- Donkey
+- Dorcas Gazelle
+- Double-crested cormorant (Nannopterum auritum)
+- Duck
+- Eagle owl (Bubo bubo)
+- Eared grebe
+- Eastern buzzard:Buteo japonicus(Accipitridae)
+- Eastern Cottontail:Sylvilagus floridanus(Leporidae)
+- Eastern Grey Kangaroo (Macropus giganteus)
+- Egyptian goose
+- Egyptian Goose (Alopochen aegyptiacus)
+- Elephant (African Elephant)
+- Emu (Dromaius novaehollandiae)
+- Equidae
+- Eurasian Blackbird (Turdus merula)
+- Eurasian buzzard (common buzzard):Buteo buteo(Accipitridae)
+- Eurasian Collared Dove (Streptopelia decaocto)
+- Eurasian coot (Fulica atra)
+- Eurasian Eagle-Owl:Bubo bubo(Strigidae)
+- Eurasian jackdaw (Coloeus monedula)
+- Eurasian jay (Garrulus glandarius)
+- Eurasian lynx (Lynx lynx)
+- Eurasian Oystercatcher
+- Eurasian Sparrowhawk:Accipiter nisus(Accipitridae)
+- Eurasian Spoonbill (Platalea leucorodia)
+- Eurasian Tree Sparrow
+- Eurasian Wigeon:Anas penelope(Anatidae)
+- European hedgehog (Erinaceus europaeus)
+- European pine marten
+- European Rabbit (Oryctolagus cuniculus)
+- European turtle dove
+- Falcon
+- Fallow Deer:Dama dama(Cervidae)
+- Felidae
+- Ferret
+- Ferret-badger
+- Ferruginous Duck (Aythya nyroca)
+- Fisher (Pekania pennanti)
+- Fishing cat (Prionailurus viverrinus)
+- Fowl
+- Fox
+- Franklin's Gull
+- Fulvous Whistling-Duck
+- Gadwall
+- Garganey (Anas querquedula)
+- Gayal (Bos frontalis)
+- Gentoo penguin (Pygoscelis papua)
+- Geoffroy's cat (Leopardus geoffroyi)
+- Giant anteater (Myrmecophaga tridactyla)
+- Glaucous gull (Larus hyperboreus)
+- Glossy Ibis
+- Goat/sheep
+- Goats
+- Goitered gazelle (Gazella subgutturosa)
+- Golden eagle (Aquila chrysaetos)
+- Goosander
+- Goose
+- Gorilla (Gorilla gorilla)
+- Goshawk
+- Gray fox (Urocyon cinereoargenteus)
+- Gray hawk (Buteo plagiatus)
+- Gray Seal (Halichoerus grypus):Phocidae-Carnivora
+- Great Black-backed Gull (Larus marinus)
+- Great Black-headed Gull (Ichthyaetus ichthyaetus)
+- Great blue heron
+- Great Cormorant (Phalacrocorax carbo)
+- Great crested grebe (Podiceps cristatus)
+- Great Crested Grebe:Podiceps cristatus(Podicipedidae)
+- Great Crested Grebe:Podiceps Cristatus(Podicipedidae)
+- Great egret (Ardea alba)
+- Great horned owl (Bubo virginianus)
+- Great skua (Stercorarius skua)
+- Great-tailed Grackle (Quiscalus mexicanus):Icteridae-Pelecaniformes
+- Greater flamingo (Phoenicopterus roseus)
+- Greater frigate bird
+- Greater Kudu
+- Greater Rhea (Rhea americana)
+- Greater scaup
+- Greater White-fronted Goose (Anser albifrons)
+- Greater Yellowlegs
+- Grebe
+- Green sandpiper
+- Green-winged teal/Eurasian teal
+- Grey crowned crane:Balearica regulorum(Gruidae)
+- Grey gull(Leucophaeus modestus)
+- Grey headed gull (Chroicocephalus cirrocephalus)
+- Grey Heron:Ardea cinerea(Ardeidae)
+- Grey Partridge:Perdix perdix(Phasianidae)
+- Grey petrel (Procellaria cinerea)
+- Greylag goose
+- Greylag Goose:Anser anser(Anatidae)
+- Griffon vulture (Gyps fulvus)
+- Gruidae (unidentified):Gruidae (incognita)(Gruidae)
+- Guanay cormorant (Leucocarbo bougainvilliorum)
+- Guanay cormorant or Guanay shag (Leucocarbo bougainvilliorum)
+- Guinea fowl
+- Gull
+- Gull-billed tern (Gelochelidon nilotica)
+- Haematopodidae (unidentified):Haematopodidae (incognita)(Haematopodidae)
+- Haliaeetus pelagicus (Steller's sea eagle)
+- Hamster (Rodentia)
+- Harbor Seal (Phoca vitulina):Phocidae-Carnivora
+- Hare
+- Harris's hawk (Parabuteo unicinctus)
+- Hartlaub's gull (Chroicocephalus hartlaubii)
+- Hawk
+- Helmeted guineafowl (Numida meleagris)
+- Herring Gull:Larus argentatus(Laridae)
+- Hippopotamus
+- hippos
+- Hobby
+- Hooded crane:Grus monacha(Gruidae)
+- Hooded Crow (Corvus cornix)
+- Horse
+- House Crow (Corvus splendens)
+- House mouse (Mus musculus)
+- House sparrow
+- Humboldt penguin (Spheniscus humboldti)
+- Ibex
+- Iceland gull (Larus glaucoides)
+- Impala
+- Imperial Eagle (Aquila heliaca):Accipitridae-Accipitriformes
+- Imperial shag
+- Indian Peafowl (Pavo cristatus)
+- Ivory gull (Pagophila eburnea)
+- Jackal
+- Jackal (Canis spp)
+- Jackal buzzard (Buteo rufofuscus)
+- Jackass Penguin Spheniscus demersus
+- Jackdaw
+- Jaguar (Panthera onca)
+- Japanese marten (Martes melampus)
+- Japanese sparrowhawk
+- Kashmiri Markhor
+- Kelp gull
+- Kentish plover
+- King penguin (Aptenodytes patagonicus)
+- Kite
+- Kodiak grizzly bear (Ursus arctos horribilis)
+- Kudu
+- Large-billed Crow (Corvus macrorhynchos)
+- Laridae (unidentified):Laridae (incognita)(Laridae)
+- Laughing dove
+- Leopard
+- Leopard seal (Hydrurga leptonyx)
+- Lesser Black-backed Gull:Larus fuscus(Laridae)
+- Lesser sand plover (Charadrius mongolus)
+- Lesser Snow Goose
+- Lion (Panthera leo)
+- Little egret
+- Little egret (egretta garzetta)
+- Little Grebe:Tachybaptus ruficollis(Podicipedidae)
+- Little Owl (Athene noctua):Strigidae-Suliformes
+- Little Ringed Plover
+- Little stint
+- Magellanic Penguin
+- Magnificent frigatebird (Fregata magnificens)
+- Magpie
+- Mainland serow (Capricornis sumatraensis)
+- Mallard:Anas platyrhynchos(Anatidae)
+- Mandarin Duck:Aix galericulata(Anatidae)
+- Mandrillus sphinx Mandrill
+- Maned Duck:Chenonetta jubata(Anatidae)
+- Manx shearwater (Puffinus puffinus)
+- Marbled teal
+- Marine otter (Lontra felina)
+- Marsh Harrier
+- Mediterranean Gull
+- Merlin (Falco columbarius)
+- Mew gull (Larus canus)
+- Mink
+- Mongolian saiga (Saiga tatarica mongolica)
+- Monkey
+- Monkey squirrel (Saimiri sciureus)
+- Moose (Alces alces)
+- Mouflon (Ovis orientalis)
+- Mountain hare (Lepus timidus)
+- Mountain Hawk-Eagle
+- Mourning dove (Zenaida macroura).
+- Mule deer (Odocoileus hemionus)
+- Muscovy Duck:Cairina moschata(Anatidae)
+- Muskrat (Ondatra zibethicus)
+- Mute Swan:Cygnus olor(Anatidae)
+- Mynahs
+- Neotropic cormorant (Nannopterum brasilianum)
+- Northern bald ibis (Geronticus eremita)
+- Northern crested caracara (Caracara cheriway)
+- Northern elephant seal (Mirounga angustirostris)
+- Northern fulmar (Fulmarus glacialis)
+- Northern Gannet:Morus bassanus(Sulidae)
+- Northern Lapwing
+- Northern pintail (Anas acuta)
+- Northern shoveler
+- Northern shoveler (spatula clypeata)
+- Numididae (Unidentified)
+- Nyala (Tragelaphus angasii)
+- Nyctereutes viverrinus (Japanese Racoon Dog)
+- Open-billed storks
+- Orangutan
+- Oriental Magpie Robin
+- Oriental Magpie-Robin
+- Ostrich
+- Otter (Lutrinae)
+- Owl
+- Oyster catcher
+- Pacific loon (Gavia pacifica)
+- Pallas's gull (Ichthyaetus ichthyaetus)
+- Pangolin (Manis)
+- parrot
+- Parrot
+- Partridge
+- Passeridae (unidentified):Passeridae (incognita)(Passeridae)
+- Patagonian mara (Dolichotis patagonum)
+- Peacock
+- Pelecanidae (unidentified):Pelecanidae (incognita)(Pelecanidae)
+- Penguin
+- Peregrin falcon:Falco peregrinus(Falconidae)
+- Peruvian Booby (Sula variegata)
+- Peruvian pelican (Pelecanus thagus)
+- Phasianidae (unidentified):Phasianidae (incognita)(Phasianidae)
+- Phasianus colchicus (Common pheasant) - Phasanidae
+- Philippine colugo (Cynocephalus volans)
+- Phoenicopteridae (unidentified):Phoenicopteridae (incognita)(Phoenicopteridae)
+- Pied avocet
+- Pied crow (Corvus albus)
+- Pigeon
+- Pigs
+- Pink-footed Goose (Anser brachyrhynchus)
+- Pochard
+- Podicipedidae (incognita)
+- Polar bear (Ursus maritimus)
+- Polar fox
+- Polecat
+- Pony
+- Prairie Vole (Microtus ochrogaster)
+- Purple sandpiper (Calidris maritima)
+- Rabbits
+- Razorbill (Alca torda):Alcidae-Charadriiformes
+- Red breasted goose
+- Red crested pochard (Netta rufina)
+- Red Fox
+- Red junglefowl
+- Red Knot
+- Red-and-green macaw (Ara chloropterus)
+- Red-billed Gull (Larus scopulinus):Laridae-Charadriiformes
+- Red-billed teal
+- Red-breasted merganser (Mergus serrator)
+- Red-crowned crane (Grus japonensis)
+- Red-footed Booby (Sula sula)
+- red-gartered coot (Fulica armillata)
+- Red-tailed hawk
+- Red-wattled lapwing
+- Reed Cormorant
+- Rhinoceros auklet (Cerorhinca monocerata)
+- Ring Necked Duck
+- Ring-billed gull (Larus delawarensis)
+- Ringed seal (Pusa hispida)
+- Rock dove (Columba livia)
+- Rodents
+- Roe deer
+- Rook
+- Rose Pelican (Pelecanus onocrotalus)
+- Ross's goose (Anser rossii)
+- Rough-legged Hawk
+- Round-tailed ground squirrel (Xerospermophilus tereticaudus)
+- Royal tern
+- Ruddy shelduck
+- Ruddy turnstone (Arenaria interpres)
+- Ruff
+- Ruminants
+- Sable Antelope (Hippotragus niger)
+- Saker falcon (Falco cherrug)
+- Sambar (Cervus unicolor)
+- Sanderling
+- Sandwich tern
+- Scaly-breasted Munia
+- Scolopacidae (unidentified):Scolopacidae (incognita)(Scolopacidae)
+- sea lion
+- Sea otter (Enhydra lutris)
+- Secretary bird (Sagittarius serpentarius)
+- Semipalmated Sandpiper
+- Serval (Leptailurus serval)
+- Sheep
+- Silver Teal (Anas versicolor)
+- Skunk (Mephitis mephitis)
+- Slaty-backed gull (Larus schistisagus)
+- Slender-billed Gull
+- Small Ruminant
+- Snow goose (Anser caerulescens)
+- Snow leopard (Panthera uncia)
+- Snowy albatross (Diomedea exulans)
+- South America fur seal (Arctophoca australis)
+- South American Coati (Nasua nasua):Procyonidae-Carnivora
+- South American sea lion (Otaria flavescens)
+- South American Tern
+- Southern elephant seal (M. leonina)
+- Southern fulmar (Fulmarus glacialoides)
+- Southern Lapwing
+- Southern river otter (Lontra provocax)
+- Spot-billed Duck:Anas poecilorhyncha(Anatidae)
+- Spotted dove
+- Spotted eagle-owl (Bubo africanus)
+- Spotted hyena (Crocuta crocuta)
+- Spotted shag (Phalacrocorax punctatus)
+- Spotted wood owl (Strix seloputo)
+- Springbok
+- Spur-winged Goose
+- Starling
+- Steller's sea eagle (Haliaeetus pelagicus)
+- Stone marten
+- Stork
+- Strigidae (unidentified):Strigidae (incognita)(Strigidae)
+- Sulids (Sulidae)
+- Suncus murinus
+- Surf Scoter (Melanitta perspicillata):Anatidae-Anseriformes
+- Swainson's hawk (Buteo swainsoni)
+- Swallow
+- Swan
+- Swift tern (Thalasseus bergii)
+- Swine
+- Tawny eagle (Aquila rapax)
+- Tawny owl (Strix aluco)
+- Teal
+- Tern
+- Thick-billed Murre (Uria lomvia):Alcidae-Charadriiformes
+- Threskiornithidae (unidentified):Threskiornithidae (incognita)(Threskiornithidae)
+- Thrush (Turdidae)
+- Tiger (Panthera tigris)
+- Trumpeter swan (Cygnus buccinator)
+- Tufted duck
+- Tundra swan (Cygnus columbianus)
+- Turkey
+- Turkey vulture (Cathartes aura)
+- Turtledove
+- Umbrella cockatoo
+- Unspecified arthropod
+- Unspecified bird
+- Unspecified env. sample
+- Unspecified fish
+- Unspecified mammal
+- Unspecified reptiles
+- Ural owl
+- Variable hawk (Geranoaetus polyosoma)
+- Virginia opossum (Didelphis virginiana)
+- Vulture
+- Wader
+- Walrus (Odobenus rosmarus
+- Warbler
+- Warthog
+- Water buffalo
+- Waterbuck (Kobus ellipsiprymnus)
+- Waved albatross (Phoebastria irrorata)
+- Weddell seal (Leptonychotes weddellii)
+- Western deer mouse (Peromyscus sonoriensis)
+- Western Grebe (Aechmophorus occidentalis):Podicipedidae-Procellariiformes
+- Whiskered tern
+- White backed duck
+- White rhinoceros (Ceratotherium simum)
+- White Stork:Ciconia ciconia(Ciconiidae)
+- White tailed eagle (Haliaeetus albicilla)
+- White-cheeked pintail
+- White-faced ibis (Plegadis chihi)
+- White-faced Whistling-Duck
+- White-naped crane:Grus vipio(Gruidae)
+- White-tailed deer (Odocoileus virginianus)
+- White-winged black tern (Chlidonias leucopterus)
+- Whooper Swan:Cygnus cygnus(Anatidae)
+- Wigeons:Mareca penelope(Anatidae)
+- Wild boar:Sus scrofa(Suidae)
+- Wild cat
+- Wild duck
+- Wild fox
+- Wild goat
+- Wild rabbit
+- Wild reindeer
+- Wild tundra swan
+- Wild turkey (Meleagris gallopavo)
+- Wild waterfowl (wild ducks)
+- Wolf
+- Wood Duck (Aix sponsa) (Anatidae)
+- Wood sandpiper
+- xpeacock
+- Yaks
+- Yellow-billed duck (Anas undulata)
+- Yellow-legged gull (Larus michahellis)
+- Yellow-throated marten (Martes flavigula)
+- Zebras
