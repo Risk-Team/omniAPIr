@@ -1,4 +1,35 @@
 # Test FAOSTAT functions
+test_that("EMPRES species helper builds public API tag tuples", {
+    expect_equal(
+        omniAPIr:::.empres_species_filter(
+            specie = "Cattle",
+            specie_type = "Domestic",
+            specie_class = "Mammal"
+        ),
+        "<type:Domestic><class:Mammal><specie:Cattle>"
+    )
+
+    expect_equal(
+        omniAPIr:::.empres_species_filter(
+            specie = c("Cattle", "Chicken"),
+            specie_type = "Domestic"
+        ),
+        "<type:Domestic><specie:Cattle>,<type:Domestic><specie:Chicken>"
+    )
+
+    expect_equal(
+        omniAPIr:::.empres_species_filter("<all>"),
+        "<all>"
+    )
+})
+
+test_that("EMPRES public API key requirement is explicit before network calls", {
+    expect_error(
+        get_empres_data(api_key = NA_character_),
+        "requires an X-API-Key"
+    )
+})
+
 test_that("get_faostat_data works with livestock data", {
     skip_if_not_installed("httr")
 

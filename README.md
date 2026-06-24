@@ -104,7 +104,7 @@ api_info <- get_api_info("FAOSTAT")
 | `get_unsdg_data()` | UN SDG - SDG Indicators | No | No |
 | `get_fao_fra_data()` | FAO FRA - Forest Data | No | No |
 | `get_undp_data()` | UNDP HDR - Human Development | Yes (API key) | No |
-| `get_empres_data()` | FAO EMPRES-i - Animal Diseases | No | No |
+| `get_empres_data()` | FAO EMPRES-i - Animal Diseases | Yes (API key) | No |
 | `get_and_process_ibat_data()` | IBAT - Biodiversity | Yes (API key + token) | No |
 | `get_giga_schools_data()` | Giga - School Connectivity | Yes (token) | No |
 | `get_ndc_data()` | Climate Watch - NDC Data | No | No |
@@ -237,10 +237,13 @@ wb_data <- get_wb_data(
 ### EMPRES-i - Animal Disease Outbreaks
 
 ```r
-# Get cattle disease outbreak data for Kenya
+# Set once for the public API
+Sys.setenv(EMPRES_API_KEY = "your_api_key")
+
+# Get cattle-related disease outbreak data for Kenya
 empres_data <- get_empres_data(
   country_iso3 = "KEN",
-  animals = "cattle"  # Auto-converts to relevant diseases
+  animals = "cattle"  # Backward-compatible disease expansion
 )
 
 # Multiple animal types
@@ -249,10 +252,18 @@ empres_data <- get_empres_data(
   animals = c("cattle", "sheep", "goats")
 )
 
-# Get specific disease data using shortcuts
+# Get specific disease data
 fmd_data <- get_empres_data(
   country_iso3 = "KEN",
-  animals = "fmd"  # Foot and mouth disease
+  disease = "Foot and mouth disease"
+)
+
+# Use the new species filter
+cattle_events <- get_empres_data(
+  country_iso3 = "KEN",
+  specie = "Cattle",
+  specie_type = "Domestic",
+  specie_class = "Mammal"
 )
 ```
 

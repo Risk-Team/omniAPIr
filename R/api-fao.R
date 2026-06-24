@@ -1184,22 +1184,150 @@ get_fao_fra_data <- function(
 }
 
 
+# Format a vector as the comma-separated filter value expected by the EMPRES
+# public endpoint. NULL and empty values are omitted from the request.
+.empres_collapse_filter <- function(x) {
+  if (is.null(x) || length(x) == 0) {
+    return(NULL)
+  }
+
+  x <- as.character(x)
+  x <- x[!is.na(x) & nzchar(x)]
+
+  if (length(x) == 0) {
+    return(NULL)
+  }
+
+  paste(x, collapse = ",")
+}
+
+.empres_country_names <- function(country_iso3) {
+  if (is.null(country_iso3) || length(country_iso3) == 0) {
+    return(NULL)
+  }
+
+  iso3 <- toupper(as.character(country_iso3))
+  countries <- countrycode::countrycode(
+    iso3,
+    origin = "iso3c",
+    destination = "country.name.en",
+    warn = FALSE
+  )
+
+  missing <- iso3[is.na(countries)]
+  if (length(missing) > 0) {
+    stop(
+      "Country ISO3 code(s) not recognized: ",
+      paste(missing, collapse = ", "),
+      call. = FALSE
+    )
+  }
+
+  unname(countries)
+}
+
+.empres_species_filter <- function(specie = NULL, specie_type = NULL, specie_class = NULL) {
+  if (is.null(specie) && is.null(specie_type) && is.null(specie_class)) {
+    return(NULL)
+  }
+
+  if (!is.null(specie) && any(tolower(specie) == "all")) {
+    return("<all>")
+  }
+
+  has_tuple <- !is.null(specie) && all(grepl("^<", specie))
+  if (has_tuple && is.null(specie_type) && is.null(specie_class)) {
+    return(.empres_collapse_filter(specie))
+  }
+
+  lengths <- c(length(specie %||% character()), length(specie_type %||% character()), length(specie_class %||% character()))
+  lengths <- lengths[lengths > 0]
+  if (length(lengths) == 0) {
+    return(NULL)
+  }
+  n <- max(lengths)
+
+  recycle_to <- function(x, n, name) {
+    if (is.null(x)) {
+      return(rep(NA_character_, n))
+    }
+    x <- as.character(x)
+    if (length(x) == n) {
+      return(x)
+    }
+    if (length(x) == 1) {
+      return(rep(x, n))
+    }
+    stop("EMPRES species filter component `", name, "` must have length 1 or ", n, ".", call. = FALSE)
+  }
+
+  species <- recycle_to(specie, n, "specie")
+  types <- recycle_to(specie_type, n, "specie_type")
+  classes <- recycle_to(specie_class, n, "specie_class")
+
+  tuples <- vapply(seq_len(n), function(i) {
+    parts <- character()
+    if (!is.na(types[i]) && nzchar(types[i])) {
+      parts <- c(parts, paste0("<type:", types[i], ">"))
+    }
+    if (!is.na(classes[i]) && nzchar(classes[i])) {
+      parts <- c(parts, paste0("<class:", classes[i], ">"))
+    }
+    if (!is.na(species[i]) && nzchar(species[i])) {
+      parts <- c(parts, paste0("<specie:", species[i], ">"))
+    }
+    paste0(parts, collapse = "")
+  }, character(1))
+
+  .empres_collapse_filter(tuples)
+}
+
+`%||%` <- function(x, y) {
+  if (is.null(x)) y else x
+}
+
 #' Get FAO EMPRES-i Animal Disease Data
 #'
 #' @description
 #' Retrieves animal disease outbreak data from the FAO Emergency Prevention System
-#' for Animal Health (EMPRES-i) API.
+#' for Animal Health (EMPRES-i) public API.
 #'
 #' @param country_iso3 Character. ISO3 country code. Default is NULL (all countries).
+#' @param area Character vector. Country names or geographic groupings accepted by the
+#'   EMPRES public API. If supplied, this is used instead of \code{country_iso3}.
 #' @param animals Character vector. Animal type(s) or disease code(s). Accepts common names
-#'   like "cattle", "pigs", "chicken", etc. Default is "All".
-#' @param diagnosis_status Character. Diagnosis status filter: "confirmed", "suspected",
-#'   or "both". Default is "confirmed".
-#' @param confidentiality_level Character. Confidentiality level: "public", "confidential",
-#'   or "both". Default is "both".
-#' @param empresi_version Character. EMPRES-i version: "v1", "v2", or "all". Default is "all".
+#'   like "cattle", "pigs", and "chicken", or disease shortcuts like "fmd".
+#'   This argument is kept for backward compatibility and expands to disease filters.
+#'   Use \code{specie}, \code{specie_type}, and \code{specie_class} for species filters.
+#' @param disease Character vector. Disease names, or disease/subtype values using the
+#'   public API separator \code{" -- "}. If supplied, this overrides \code{animals}.
+#' @param diagnosis_status Character vector. Diagnosis status filter. Accepted values are
+#'   "confirmed", "denied", "suspected", and "tentative"; "both" maps to confirmed,
+#'   suspected, and tentative for backward compatibility. Default is "confirmed".
+#' @param diagnosis_source Character vector. Diagnosis source labels. Default is NULL.
+#' @param has_human_affected Character. Public API human affected filter: "0" for no
+#'   filter, "1" for no affected humans flag, or "2" for affected humans flag.
+#' @param include_reporting_date Character. "1" reuses reporting-date bounds for missing
+#'   observation-date bounds; "0" does not. Default is "0".
+#' @param specie Character vector. Species values or full public API tag tuples such as
+#'   \code{"<type:Domestic><class:Mammal><specie:Cattle>"}.
+#' @param specie_type Character vector. Species type tags, for example "Domestic" or "Wild".
+#' @param specie_class Character vector. Species class tags, for example "Mammal" or "Birds".
+#' @param start_observation_date,end_observation_date Character date bounds in YYYY-MM-DD format.
+#' @param start_creation_date,end_creation_date Character date bounds in YYYY-MM-DD format.
+#' @param start_reporting_date,end_reporting_date Character date bounds in YYYY-MM-DD format.
+#' @param empresi_version Character. EMPRES-i version: "all", "1", or "0". Default is "all".
+#' @param confidentiality_level Deprecated. Ignored by the public API.
 #' @param use_lookup Logical. Whether to use built-in lookup tables for animals and diseases.
 #'   Default is TRUE.
+#' @param offset Integer. Starting offset for API pagination. Default is 0.
+#' @param paginate Logical. Whether to continue requesting pages until the API returns fewer
+#'   than \code{page_size} records. Default is TRUE.
+#' @param page_size Integer. Server page size used to advance \code{offset}. The public API
+#'   currently documents offset-based paging with 1000-row increments.
+#' @param max_records Integer. Maximum number of records to return. Default is Inf.
+#' @param api_key Character. EMPRES public API key. Defaults to the \code{EMPRES_API_KEY}
+#'   environment variable.
 #' @param verbose Logical. If TRUE, prints detailed progress messages. Default is FALSE.
 #' @param max_retries Integer. Maximum number of retry attempts for failed requests.
 #'   Default is 3.
@@ -1207,13 +1335,16 @@ get_fao_fra_data <- function(
 #' @return A data.frame containing animal disease outbreak data, or invisible(NULL) if no data found.
 #'
 #' @details
-#' API Documentation: \url{https://empres-i.apps.fao.org/}
+#' API Documentation: \url{https://fao-empp-data-explorer-be-51851897723.europe-west1.run.app/api/docs}
 #'
 #' The function supports animal names and disease shortcuts when use_lookup=TRUE:
 #' \itemize{
 #'   \item Animals: cattle, pigs, chicken, sheep, goats, horses, buffalo, camels, etc.
 #'   \item Disease shortcuts: fmd, asf, ai, ppr, ahs, newcastle, rabies, anthrax, etc.
 #' }
+#'
+#' The public API does not expose a field-selection parameter. The function requests the
+#' endpoint's default fields and returns them as supplied by the API.
 #'
 #' @export
 #'
@@ -1240,243 +1371,67 @@ get_fao_fra_data <- function(
 #' }
 get_empres_data <- function(
   country_iso3 = NULL,
+  area = NULL,
   animals = "All",
+  disease = NULL,
   diagnosis_status = "confirmed",
+  diagnosis_source = NULL,
+  has_human_affected = "0",
+  include_reporting_date = "0",
+  specie = NULL,
+  specie_type = NULL,
+  specie_class = NULL,
+  start_observation_date = NULL,
+  end_observation_date = NULL,
+  start_creation_date = NULL,
+  end_creation_date = NULL,
+  start_reporting_date = NULL,
+  end_reporting_date = NULL,
   confidentiality_level = "both",
   empresi_version = "all",
   use_lookup = TRUE,
+  offset = 0,
+  paginate = TRUE,
+  page_size = 1000,
+  max_records = Inf,
+  api_key = Sys.getenv("EMPRES_API_KEY", unset = NA_character_),
   verbose = FALSE,
   max_retries = 3
 ) {
-  # Base URL for EMPRES API
-  base <- "https://fao-empp-data-explorer-be-175434516411.europe-west1.run.app/events"
+  base <- "https://fao-empp-data-explorer-be-51851897723.europe-west1.run.app/api/events"
 
-  # ISO3 to country name lookup table (based on EMPRES area dimension)
-  if (use_lookup && !is.null(country_iso3)) {
-    iso3_to_country <- list(
-      "AFG" = "Afghanistan",
-      "ALB" = "Albania",
-      "DZA" = "Algeria",
-      "AND" = "Andorra",
-      "AGO" = "Angola",
-      "ATG" = "Antigua and Barbuda",
-      "ARG" = "Argentina",
-      "ARM" = "Armenia",
-      "AUS" = "Australia",
-      "AUT" = "Austria",
-      "AZE" = "Azerbaijan",
-      "BHS" = "Bahamas",
-      "BHR" = "Bahrain",
-      "BGD" = "Bangladesh",
-      "BRB" = "Barbados",
-      "BLR" = "Belarus",
-      "BEL" = "Belgium",
-      "BLZ" = "Belize",
-      "BEN" = "Benin",
-      "BTN" = "Bhutan",
-      "BOL" = "Bolivia (Plurinational State of)",
-      "BIH" = "Bosnia and Herzegovina",
-      "BWA" = "Botswana",
-      "BRA" = "Brazil",
-      "BRN" = "Brunei Darussalam",
-      "BGR" = "Bulgaria",
-      "BFA" = "Burkina Faso",
-      "BDI" = "Burundi",
-      "CPV" = "Cabo Verde",
-      "KHM" = "Cambodia",
-      "CMR" = "Cameroon",
-      "CAN" = "Canada",
-      "CAF" = "Central African Republic",
-      "TCD" = "Chad",
-      "CHL" = "Chile",
-      "CHN" = "China",
-      "COL" = "Colombia",
-      "COM" = "Comoros",
-      "COG" = "Congo",
-      "COK" = "Cook Islands",
-      "CRI" = "Costa Rica",
-      "HRV" = "Croatia",
-      "CUB" = "Cuba",
-      "CYP" = "Cyprus",
-      "CZE" = "Czechia",
-      "CIV" = "Côte d'Ivoire",
-      "PRK" = "Democratic People's Republic of Korea",
-      "COD" = "Democratic Republic of the Congo",
-      "DNK" = "Denmark",
-      "DJI" = "Djibouti",
-      "DMA" = "Dominica",
-      "DOM" = "Dominican Republic",
-      "ECU" = "Ecuador",
-      "EGY" = "Egypt",
-      "SLV" = "El Salvador",
-      "GNQ" = "Equatorial Guinea",
-      "ERI" = "Eritrea",
-      "EST" = "Estonia",
-      "SWZ" = "Eswatini",
-      "ETH" = "Ethiopia",
-      "FRO" = "Faroe Islands",
-      "FJI" = "Fiji",
-      "FIN" = "Finland",
-      "FRA" = "France",
-      "GAB" = "Gabon",
-      "GMB" = "Gambia",
-      "GEO" = "Georgia",
-      "DEU" = "Germany",
-      "GHA" = "Ghana",
-      "GRC" = "Greece",
-      "GRD" = "Grenada",
-      "GTM" = "Guatemala",
-      "GIN" = "Guinea",
-      "GNB" = "Guinea-Bissau",
-      "GUY" = "Guyana",
-      "HTI" = "Haiti",
-      "VAT" = "Holy See",
-      "HND" = "Honduras",
-      "HUN" = "Hungary",
-      "ISL" = "Iceland",
-      "IND" = "India",
-      "IDN" = "Indonesia",
-      "IRN" = "Iran (Islamic Republic of)",
-      "IRQ" = "Iraq",
-      "IRL" = "Ireland",
-      "ISR" = "Israel",
-      "ITA" = "Italy",
-      "JAM" = "Jamaica",
-      "JPN" = "Japan",
-      "JOR" = "Jordan",
-      "KAZ" = "Kazakhstan",
-      "KEN" = "Kenya",
-      "KIR" = "Kiribati",
-      "KWT" = "Kuwait",
-      "KGZ" = "Kyrgyzstan",
-      "LAO" = "Lao People's Democratic Republic",
-      "LVA" = "Latvia",
-      "LBN" = "Lebanon",
-      "LSO" = "Lesotho",
-      "LBR" = "Liberia",
-      "LBY" = "Libya",
-      "LIE" = "Liechtenstein",
-      "LTU" = "Lithuania",
-      "LUX" = "Luxembourg",
-      "MDG" = "Madagascar",
-      "MWI" = "Malawi",
-      "MYS" = "Malaysia",
-      "MDV" = "Maldives",
-      "MLI" = "Mali",
-      "MLT" = "Malta",
-      "MHL" = "Marshall Islands",
-      "MRT" = "Mauritania",
-      "MUS" = "Mauritius",
-      "MEX" = "Mexico",
-      "FSM" = "Micronesia (Federated States of)",
-      "MCO" = "Monaco",
-      "MNG" = "Mongolia",
-      "MNE" = "Montenegro",
-      "MAR" = "Morocco",
-      "MOZ" = "Mozambique",
-      "MMR" = "Myanmar",
-      "NAM" = "Namibia",
-      "NRU" = "Nauru",
-      "NPL" = "Nepal",
-      "NLD" = "Netherlands (Kingdom of the)",
-      "NZL" = "New Zealand",
-      "NIC" = "Nicaragua",
-      "NER" = "Niger",
-      "NGA" = "Nigeria",
-      "NIU" = "Niue",
-      "MKD" = "North Macedonia",
-      "NOR" = "Norway",
-      "OMN" = "Oman",
-      "PAK" = "Pakistan",
-      "PLW" = "Palau",
-      "PSE" = "Palestine",
-      "PAN" = "Panama",
-      "PNG" = "Papua New Guinea",
-      "PRY" = "Paraguay",
-      "PER" = "Peru",
-      "PHL" = "Philippines",
-      "POL" = "Poland",
-      "PRT" = "Portugal",
-      "PRI" = "Puerto Rico",
-      "PSE" = "Gaza Strip (Palestinian Territory)",
-      "QAT" = "Qatar",
-      "KOR" = "Republic of Korea",
-      "MDA" = "Republic of Moldova",
-      "ROU" = "Romania",
-      "RUS" = "Russian Federation",
-      "RWA" = "Rwanda",
-      "KNA" = "Saint Kitts and Nevis",
-      "LCA" = "Saint Lucia",
-      "VCT" = "Saint Vincent and the Grenadines",
-      "WSM" = "Samoa",
-      "SMR" = "San Marino",
-      "STP" = "Sao Tome and Principe",
-      "SAU" = "Saudi Arabia",
-      "SEN" = "Senegal",
-      "SRB" = "Serbia",
-      "SYC" = "Seychelles",
-      "SLE" = "Sierra Leone",
-      "SGP" = "Singapore",
-      "SVK" = "Slovakia",
-      "SVN" = "Slovenia",
-      "SLB" = "Solomon Islands",
-      "SOM" = "Somalia",
-      "ZAF" = "South Africa",
-      "SSD" = "South Sudan",
-      "ESP" = "Spain",
-      "LKA" = "Sri Lanka",
-      "SDN" = "Sudan",
-      "SUR" = "Suriname",
-      "SWE" = "Sweden",
-      "CHE" = "Switzerland",
-      "SYR" = "Syrian Arab Republic",
-      "TJK" = "Tajikistan",
-      "THA" = "Thailand",
-      "TLS" = "Timor-Leste",
-      "TGO" = "Togo",
-      "TKL" = "Tokelau",
-      "TON" = "Tonga",
-      "TTO" = "Trinidad and Tobago",
-      "TUN" = "Tunisia",
-      "TKM" = "Turkmenistan",
-      "TUV" = "Tuvalu",
-      "TUR" = "Türkiye",
-      "UGA" = "Uganda",
-      "UKR" = "Ukraine",
-      "ARE" = "United Arab Emirates",
-      "GBR" = "United Kingdom of Great Britain and Northern Ireland",
-      "TZA" = "United Republic of Tanzania",
-      "USA" = "United States of America",
-      "URY" = "Uruguay",
-      "UZB" = "Uzbekistan",
-      "VUT" = "Vanuatu",
-      "VEN" = "Venezuela (Bolivarian Republic of)",
-      "VNM" = "Viet Nam",
-      "YEM" = "Yemen",
-      "ZMB" = "Zambia",
-      "ZWE" = "Zimbabwe"
+  if (is.null(api_key) || length(api_key) != 1 || is.na(api_key) || !nzchar(api_key)) {
+    stop(
+      "The EMPRES public API currently requires an X-API-Key header. ",
+      "Set EMPRES_API_KEY or pass api_key.",
+      call. = FALSE
     )
-
-    # Convert ISO3 to country name
-    if (country_iso3 %in% names(iso3_to_country)) {
-      area_name <- iso3_to_country[[country_iso3]]
-    } else {
-      stop(paste(
-        "Country ISO3 code",
-        country_iso3,
-        "not found in EMPRES database.",
-        "\nAvailable codes:",
-        paste(names(iso3_to_country), collapse = ", ")
-      ))
-    }
-  } else {
-    area_name <- country_iso3 # Use as-is if not using lookup
   }
 
-  # Comprehensive disease lookup for animals - each animal can get multiple diseases
-  if (use_lookup && is.character(animals) && !all(animals == "All")) {
+  if (length(offset) != 1 || is.na(offset) || offset < 0) {
+    stop("`offset` must be a single non-negative integer.", call. = FALSE)
+  }
+  if (length(page_size) != 1 || is.na(page_size) || page_size <= 0) {
+    stop("`page_size` must be a single positive integer.", call. = FALSE)
+  }
+  if (length(max_records) != 1 || is.na(max_records) || max_records <= 0) {
+    stop("`max_records` must be a single positive number or Inf.", call. = FALSE)
+  }
+
+  if (!identical(confidentiality_level, "both")) {
+    warning("`confidentiality_level` is ignored by the EMPRES public API.", call. = FALSE)
+  }
+
+  if (!is.null(area)) {
+    area_name <- area
+  } else if (use_lookup) {
+    area_name <- .empres_country_names(country_iso3)
+  } else {
+    area_name <- country_iso3
+  }
+
+  if (is.null(disease) && use_lookup && is.character(animals) && !all(animals == "All")) {
     animal_diseases <- list(
-      # Cattle diseases
       "cattle" = c(
         "Foot and mouth disease",
         "Bovine tuberculosis",
@@ -1488,36 +1443,30 @@ get_empres_data <- function(
         "Contagious bovine pleuropneumonia",
         "Lumpy skin disease",
         "Theileriosis",
-        "Trypanosomosis"
+        "Trypanosomosis (tsetse-transmitted)"
       ),
-
-      # Swine diseases
       "pigs" = c(
         "African swine fever",
         "Classical swine fever",
         "Porcine reproductive and respiratory syndrome",
-        "Porcine epidemic diarrhoea",
+        "Porcine epidemic diarrhea",
         "Swine vesicular disease",
-        "Nipah virus infection",
-        "Japanese encephalitis"
+        "Nipah virus encephalitis",
+        "Japanese Encephalitis"
       ),
-
-      # Poultry diseases
       "chicken" = c(
         "Influenza - Avian",
         "Newcastle disease",
         "Infectious bursal disease",
         "Marek's disease",
-        "Infectious bronchitis",
+        "Infectious Bronchitis",
         "Avian infectious laryngotracheitis",
         "Fowl cholera",
-        "Salmonellosis"
+        "Fowl typhoid"
       ),
-
-      # Sheep diseases
       "sheep" = c(
         "Peste des petits ruminants",
-        "Sheep pox",
+        "Sheep pox and goat pox",
         "Contagious caprine pleuropneumonia",
         "Brucellosis",
         "Anthrax",
@@ -1525,8 +1474,6 @@ get_empres_data <- function(
         "Scrapie",
         "Foot and mouth disease"
       ),
-
-      # Goat diseases
       "goats" = c(
         "Peste des petits ruminants",
         "Contagious caprine pleuropneumonia",
@@ -1534,42 +1481,26 @@ get_empres_data <- function(
         "Anthrax",
         "Rabies",
         "Foot and mouth disease",
-        "Caprine arthritis encephalitis"
+        "Caprine arthritis/encephalitis"
       ),
-
-      # Horse diseases
       "horses" = c(
         "African horse sickness",
-        "Equine influenza",
-        "Equine herpesvirus",
+        "Influenza - Equine",
+        "Equine rhinopneumonitis",
         "Equine infectious anaemia",
         "Glanders",
         "Venezuelan equine encephalomyelitis",
-        "West Nile virus infection"
+        "West Nile Fever"
       ),
-
-      # Aquaculture diseases
       "aquaculture" = c(
-        "White spot disease",
-        "Infectious haematopoietic necrosis",
-        "Viral haemorrhagic septicaemia",
-        "Koi herpesvirus disease",
-        "Epizootic haematopoietic necrosis",
-        "Infectious salmon anaemia",
-        "Tilapia lake virus disease"
+        "Epizootic ulcerative syndrome"
       ),
-
-      # Bee diseases
       "bees" = c(
         "Varroosis of honey bees",
-        "American foulbrood",
-        "European foulbrood",
-        "Nosemosis",
-        "Tropilaelaps infestation",
+        "American foulbrood of honey bees",
+        "European foulbrood of honey bees",
         "Small hive beetle infestation"
       ),
-
-      # Buffalo diseases
       "buffalo" = c(
         "Foot and mouth disease",
         "Bovine tuberculosis",
@@ -1578,26 +1509,19 @@ get_empres_data <- function(
         "Rift Valley fever",
         "Theileriosis"
       ),
-
-      # Camel diseases
       "camels" = c(
-        "Middle East respiratory syndrome",
+        "MERS-CoV",
         "Rift Valley fever",
-        "Camel pox",
-        "Trypanosomosis",
+        "Camelpox",
+        "Surra (Trypanosoma evansi)",
         "Brucellosis"
       ),
-
-      # Deer diseases
       "deer" = c(
-        "Chronic wasting disease",
         "Bovine tuberculosis",
         "Foot and mouth disease",
         "Brucellosis",
         "Anthrax"
       ),
-
-      # Disease code shortcuts (for backward compatibility)
       "fmd" = "Foot and mouth disease",
       "asf" = "African swine fever",
       "ai" = "Influenza - Avian",
@@ -1611,128 +1535,133 @@ get_empres_data <- function(
       "covid" = "COVID-19 (SARS-COV-2)"
     )
 
-    # Handle multiple animals
-    if (length(animals) > 1) {
-      # Check for invalid animals
-      invalid_animals <- animals[!animals %in% names(animal_diseases)]
-      if (length(invalid_animals) > 0) {
-        valid_options <- paste(names(animal_diseases), collapse = ", ")
-        stop(paste(
-          "Invalid animal(s):",
-          paste(invalid_animals, collapse = ", "),
-          "\nValid options are:",
-          valid_options
-        ))
-      }
-
-      # Collect all diseases for all animals
-      all_diseases <- c()
-      for (animal in animals) {
-        if (animal %in% names(animal_diseases)) {
-          diseases <- animal_diseases[[animal]]
-          # Handle both vectors (multiple diseases) and single strings
-          if (is.vector(diseases) && length(diseases) > 1) {
-            all_diseases <- c(all_diseases, diseases)
-          } else {
-            all_diseases <- c(all_diseases, diseases)
-          }
-        }
-      }
-
-      # Remove duplicates while preserving order
-      disease <- unique(all_diseases)
-    } else {
-      # Single animal
-      if (animals %in% names(animal_diseases)) {
-        diseases <- animal_diseases[[animals]]
-        # Handle both vectors (multiple diseases) and single strings
-        if (is.vector(diseases) && length(diseases) > 1) {
-          disease <- diseases
-        } else {
-          disease <- diseases
-        }
-      } else {
-        disease <- animals
-      }
+    invalid_animals <- animals[!animals %in% names(animal_diseases)]
+    if (length(invalid_animals) > 0) {
+      valid_options <- paste(names(animal_diseases), collapse = ", ")
+      stop(
+        "Invalid animal(s): ",
+        paste(invalid_animals, collapse = ", "),
+        "\nValid options are: ",
+        valid_options,
+        call. = FALSE
+      )
     }
-  } else {
+
+    disease <- unique(unlist(animal_diseases[animals], use.names = FALSE))
+  } else if (is.null(disease)) {
     disease <- if (all(animals == "All")) "All" else animals
   }
 
-  # Build parameters list
+  if (length(diagnosis_status) == 1 && identical(tolower(diagnosis_status), "both")) {
+    diagnosis_status <- c("confirmed", "suspected", "tentative")
+  }
+
+  valid_status <- c("confirmed", "denied", "suspected", "tentative")
+  invalid_status <- setdiff(tolower(diagnosis_status), valid_status)
+  if (length(invalid_status) > 0) {
+    stop(
+      "Invalid diagnosis_status value(s): ",
+      paste(invalid_status, collapse = ", "),
+      ". Accepted values are: ",
+      paste(valid_status, collapse = ", "),
+      ".",
+      call. = FALSE
+    )
+  }
+
+  empresi_version <- as.character(empresi_version)
+  if (length(empresi_version) != 1 || !empresi_version %in% c("all", "1", "0")) {
+    stop("`empresi_version` must be one of: all, 1, 0.", call. = FALSE)
+  }
+
   params <- list(
+    diagnosis_status = .empres_collapse_filter(tolower(diagnosis_status)),
+    diagnosis_source = .empres_collapse_filter(diagnosis_source),
+    disease = .empres_collapse_filter(disease),
     empresi_version = empresi_version,
-    diagnosis_status = diagnosis_status,
-    confidentiality_level = confidentiality_level
+    area = .empres_collapse_filter(area_name),
+    has_human_affected = as.character(has_human_affected),
+    include_reporting_date = as.character(include_reporting_date),
+    specie = .empres_species_filter(specie, specie_type, specie_class),
+    start_observation_date = start_observation_date,
+    end_observation_date = end_observation_date,
+    start_creation_date = start_creation_date,
+    end_creation_date = end_creation_date,
+    start_reporting_date = start_reporting_date,
+    end_reporting_date = end_reporting_date
   )
+  params <- params[!vapply(params, is.null, logical(1))]
 
-  # Add area if specified
-  if (!is.null(area_name)) {
-    params$area <- area_name
-  }
-
-  # Add disease parameters - handle multiple diseases properly
-  if (length(disease) > 1) {
-    # For multiple diseases, add each as a separate disease parameter
-    for (i in seq_along(disease)) {
-      params[[paste0("disease", ifelse(i == 1, "", i))]] <- disease[i]
+  for (date_param in names(params)[grepl("_(observation|creation|reporting)_date$", names(params))]) {
+    date_value <- params[[date_param]]
+    if (length(date_value) != 1 || !grepl("^\\d{4}-\\d{2}-\\d{2}$", date_value)) {
+      stop("`", date_param, "` must use YYYY-MM-DD format.", call. = FALSE)
     }
-  } else {
-    # Single disease
-    params$disease <- disease
   }
 
-  # Set date parameters to NULL (as in original)
-  params$start_observation_date <- NULL
-  params$end_observation_date <- NULL
-
-  # Build query string
-  qs <- paste0(
-    names(params),
-    "=",
-    vapply(params, URLencode, "", reserved = TRUE),
-    collapse = "&"
-  )
-
-  url <- paste0(base, "?", qs)
+  if (length(has_human_affected) != 1 || !as.character(has_human_affected) %in% c("0", "1", "2")) {
+    stop("`has_human_affected` must be one of: 0, 1, 2.", call. = FALSE)
+  }
+  if (length(include_reporting_date) != 1 || !as.character(include_reporting_date) %in% c("0", "1")) {
+    stop("`include_reporting_date` must be one of: 0, 1.", call. = FALSE)
+  }
 
   if (verbose) {
-    message(sprintf("Fetching EMPRES-i data from API..."))
-    if (!is.null(country_iso3)) {
-      message(sprintf(
-        "Country: %s",
-        if (use_lookup) area_name else country_iso3
-      ))
-    }
-    if (length(disease) > 1) {
-      message(sprintf("Diseases: %s", paste(head(disease, 3), collapse = ", ")))
-      if (length(disease) > 3) {
-        message(sprintf("  (and %d more)", length(disease) - 3))
-      }
-    } else if (disease != "All") {
-      message(sprintf("Disease: %s", disease))
-    }
+    message("Fetching EMPRES-i data from public API...")
+    message(sprintf("Endpoint: %s", base))
+    message(sprintf("Offset: %s", offset))
   }
 
-  # Fetch data with retry logic
-  retry_attempt <- 1
-  success <- FALSE
-  response <- NULL
+  fetch_page <- function(page_offset) {
+    page_params <- c(params, list(offset = page_offset))
+    request <- httr2::request(base) |>
+      httr2::req_headers(
+        `X-API-Key` = api_key,
+        Accept = "application/json"
+      )
+    request <- do.call(httr2::req_url_query, c(list(request), page_params))
 
-  while (retry_attempt <= max_retries && !success) {
-    tryCatch(
-      {
-        response <- httr2::request(url) |>
-          httr2::req_perform()
+    retry_attempt <- 1
+    repeat {
+      tryCatch(
+        {
+          response <- request |>
+            httr2::req_perform()
 
-        if (httr2::resp_status(response) == 200) {
-          success <- TRUE
-        } else {
-          stop(sprintf("HTTP error %d", httr2::resp_status(response)))
-        }
-      },
-      error = function(e) {
-        if (retry_attempt < max_retries) {
+          status <- httr2::resp_status(response)
+          if (status >= 400) {
+            body <- httr2::resp_body_string(response)
+            stop(sprintf("HTTP error %d: %s", status, body), call. = FALSE)
+          }
+
+          data <- jsonlite::fromJSON(httr2::resp_body_string(response), flatten = TRUE)
+          if (is.data.frame(data)) {
+            return(data)
+          }
+          for (field in c("data", "results", "items", "events")) {
+            if (!is.null(data[[field]])) {
+              if (is.data.frame(data[[field]])) {
+                return(data[[field]])
+              }
+              return(as.data.frame(data[[field]]))
+            }
+          }
+          if (is.list(data) && length(data) == 0) {
+            return(data.frame())
+          }
+          as.data.frame(data)
+        },
+        error = function(e) {
+          if (retry_attempt >= max_retries) {
+            stop(
+              sprintf(
+                "Failed to fetch EMPRES-i data after %d attempts. Last error: %s",
+                max_retries,
+                conditionMessage(e)
+              ),
+              call. = FALSE
+            )
+          }
           wait_time <- 2^retry_attempt
           if (verbose) {
             message(sprintf(
@@ -1745,55 +1674,50 @@ get_empres_data <- function(
           }
           Sys.sleep(wait_time)
           retry_attempt <<- retry_attempt + 1
-        } else {
-          stop(
-            sprintf(
-              "Failed to fetch EMPRES-i data after %d attempts. Last error: %s",
-              max_retries,
-              conditionMessage(e)
-            ),
-            call. = FALSE
-          )
         }
-      }
-    )
+      )
+    }
   }
 
-  # Parse JSON response
-  tryCatch(
-    {
-      data <- jsonlite::fromJSON(httr2::resp_body_string(response))
+  pages <- list()
+  current_offset <- as.integer(offset)
+  records_read <- 0
 
-      # Check if data is empty or NULL
-      if (
-        is.null(data) ||
-          (is.data.frame(data) && nrow(data) == 0) ||
-          (is.list(data) && length(data) == 0)
-      ) {
-        message("No EMPRES-i data found for the specified filters")
-        return(invisible(NULL))
-      }
-
-      # Convert to data frame if it's a list
-      if (is.list(data) && !is.data.frame(data)) {
-        data <- as.data.frame(data)
-      }
-
-      message(sprintf(
-        "✓ EMPRES-i data retrieved successfully: %s records",
-        format(nrow(data), big.mark = ",")
-      ))
-
-      return(data)
-    },
-    error = function(e) {
-      message(sprintf(
-        "Error parsing EMPRES-i response: %s",
-        conditionMessage(e)
-      ))
-      return(invisible(NULL))
+  repeat {
+    page <- fetch_page(current_offset)
+    if (!is.data.frame(page) || nrow(page) == 0) {
+      break
     }
-  )
+
+    pages[[length(pages) + 1]] <- page
+    records_read <- records_read + nrow(page)
+
+    if (!paginate || nrow(page) < page_size || records_read >= max_records) {
+      break
+    }
+
+    current_offset <- current_offset + page_size
+    if (verbose) {
+      message(sprintf("Fetched %s records; requesting offset %s", records_read, current_offset))
+    }
+  }
+
+  if (length(pages) == 0) {
+    message("No EMPRES-i data found for the specified filters")
+    return(invisible(NULL))
+  }
+
+  data <- dplyr::bind_rows(pages)
+  if (is.finite(max_records) && nrow(data) > max_records) {
+    data <- utils::head(data, max_records)
+  }
+
+  message(sprintf(
+    "EMPRES-i data retrieved successfully: %s records",
+    format(nrow(data), big.mark = ",")
+  ))
+
+  data
 }
 
 
