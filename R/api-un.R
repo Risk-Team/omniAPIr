@@ -947,8 +947,9 @@ get_wb_data <- function(
 #' @param exclude_aggregates Logical. If TRUE (default), filters out regional and income group aggregates,
 #'   returning only data for individual countries with valid ISO3 codes.
 #'
-#' @return A data.frame with columns: indicator, series, seriesDescription, iso3,
-#'   area, year, value, unit, sex, age, location, reporting_type, source.
+#' @return A data.frame with columns: indicator, series, seriesDescription,
+#'   isocode, iso3, area, year, value, unit, sex, age, location, reporting_type,
+#'   source.
 #'   Dimension columns contain NA if not applicable to the indicator:
 #'   - `sex`: "BOTHSEX", "MALE", "FEMALE", etc.
 #'   - `age`: "ALLAGE", "15-49", "<5Y", etc.
@@ -1141,12 +1142,23 @@ get_unsdg_data <- function(
 
     combined <- dplyr::bind_rows(all_data)
 
-    dplyr::as_tibble(combined) %>%
+    combined <- dplyr::as_tibble(combined)
+    raw_iso3 <- if ("iso3" %in% names(combined)) {
+      as.character(combined$iso3)
+    } else {
+      rep(NA_character_, nrow(combined))
+    }
+
+    combined %>%
       dplyr::mutate(
         indicator = ind,
         year = suppressWarnings(as.integer(timePeriodStart)),
         value = suppressWarnings(as.numeric(value)),
-        iso3 = countrycode::countrycode(as.numeric(geoAreaCode), "un", "iso3c")
+        iso3 = dplyr::coalesce(
+          raw_iso3,
+          countrycode::countrycode(as.numeric(geoAreaCode), "un", "iso3c")
+        ),
+        isocode = iso3
       )
   }
 
@@ -1210,6 +1222,7 @@ get_unsdg_data <- function(
     dplyr::select(
       indicator,
       dplyr::any_of(c("series", "seriesDescription")),
+      isocode,
       iso3,
       area = geoAreaName,
       year,
@@ -1224,11 +1237,11 @@ get_unsdg_data <- function(
     dplyr::group_by(
       indicator,
       dplyr::across(dplyr::any_of(c("series", "sex", "age", "location"))),
-      iso3
+      isocode
     ) %>%
     dplyr::slice_max(order_by = year, n = mrv, with_ties = FALSE) %>%
     dplyr::ungroup() %>%
-    dplyr::arrange(indicator, iso3, year)
+    dplyr::arrange(indicator, isocode, year)
 
   # Filter out aggregates by validating ISO codes (if requested)
   if (exclude_aggregates) {
@@ -1237,7 +1250,7 @@ get_unsdg_data <- function(
     final_results <- final_results %>%
       dplyr::mutate(
         is_valid_country = !is.na(countrycode::countrycode(
-          iso3,
+          isocode,
           origin = "iso3c",
           destination = "country.name",
           warn = FALSE

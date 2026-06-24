@@ -11,6 +11,25 @@ test_that("get_unsdg_data works with basic parameters", {
     expect_s3_class(result, "data.frame")
 })
 
+test_that("get_unsdg_data normalizes UNSDG geography to isocode", {
+    skip_if_not_installed("httr2")
+
+    result <- get_unsdg_data(
+        indicators = "1.4.2",
+        verbose = FALSE
+    )
+
+    expect_s3_class(result, "data.frame")
+    expect_true("isocode" %in% names(result))
+    expect_gt(length(unique(stats::na.omit(result$isocode))), 1)
+
+    kenya_rows <- result[result$isocode == "KEN", , drop = FALSE]
+    if (nrow(kenya_rows) > 0) {
+        expect_true(all(kenya_rows$isocode == "KEN"))
+        expect_true(any(result$isocode != "KEN", na.rm = TRUE))
+    }
+})
+
 test_that("get_ilo_data works with basic parameters", {
     skip_if_not_installed("httr")
 

@@ -29,8 +29,9 @@ Default is 3.}
 returning only data for individual countries with valid ISO3 codes.}
 }
 \value{
-A data.frame with columns: indicator, series, seriesDescription, iso3,
-  area, year, value, unit, sex, age, location, reporting_type, source.
+A data.frame with columns: indicator, series, seriesDescription,
+  isocode, iso3, area, year, value, unit, sex, age, location, reporting_type,
+  source.
   Dimension columns contain NA if not applicable to the indicator:
   - `sex`: "BOTHSEX", "MALE", "FEMALE", etc.
   - `age`: "ALLAGE", "15-49", "<5Y", etc.
