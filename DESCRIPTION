@@ -1,7 +1,7 @@
 Package: omniAPIr
 Type: Package
 Title: Unified Interface to Multiple International Data APIs
-Version: 0.3.3
+Version: 0.4.1
 Authors@R: c(
     person(
       "Riccardo", "Soldan",
@@ -9,11 +9,14 @@ Authors@R: c(
       role = c("aut", "cre")
     )
   )
+Author: Riccardo Soldan [aut, cre]
+Maintainer: Riccardo Soldan <riccardosoldan@hotmail.it>
 Description: Provides a unified interface to retrieve data from multiple international
     APIs including ACLED (conflict data), ILO (labor statistics), WHO (health indicators),
     FAOSTAT (agriculture data), World Bank, UN SDG, UNDP HDR, FAO EMPRES-i (animal diseases),
     IBAT (biodiversity), Giga (school connectivity), Climate Watch (NDC data), HDX HAPI
-    (humanitarian data), GBIF/GRIIS (invasive species), OpenStreetMap, and FAO Fishstat. All functions feature consistent
+    (humanitarian data), GBIF/GRIIS (invasive species), OpenStreetMap, FAO Fishstat,
+    and Copernicus Marine. All functions feature consistent
     parameter naming, automatic pagination, smart year discovery, and comprehensive error handling.
 License: GPL-3
 Encoding: UTF-8
@@ -34,18 +37,21 @@ Imports:
     rlang,
     countrycode,
     sf,
+    terra,
     curl,
     utils,
     stats,
     readr,
-    reticulate,
     rgbif,
     osmextract,
-    fishstat,
+    fishstat
 Suggests:
     testthat (>= 3.0.0),
     gfwr (>= 3.0),
-    knitr
+    knitr,
+    stars,
+    ncdf4,
+    ncmeta
 Remotes:
     GlobalFishingWatch/gfwr
 VignetteBuilder: knitr

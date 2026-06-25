@@ -4,7 +4,7 @@
 
 ## Overview
 
-`omniAPIr` provides a consistent and user-friendly interface to retrieve data from 16+ major international APIs, including conflict data, health statistics, agricultural information, humanitarian data, development indicators, and more. All functions feature:
+`omniAPIr` provides a consistent and user-friendly interface to retrieve data from 17+ major international APIs, including conflict data, health statistics, agricultural information, humanitarian data, development indicators, marine data, and more. All functions feature:
 
 - **Consistent parameter naming** (e.g., `iso3`, `indicators`, `mrv`)
 - **Automatic pagination** for large datasets
@@ -22,6 +22,9 @@ devtools::install_github("Risk-Team/omniAPIr")
 
 # For Google Earth Engine data (download_and_process_ee_image/vector)
 # Requires Python packages: pip install earthengine-api geemap
+
+# For Copernicus Marine data
+# Requires Python package: pip install copernicusmarine
 ```
 
 ## Python Dependencies
@@ -33,6 +36,19 @@ The World Bank functions (`get_wb_data`, `list_un_indicators` with World Bank) r
 conda create -n your_env_name python=3.9
 conda activate your_env_name
 pip install wbgapi
+```
+
+Google Earth Engine and Copernicus Marine functions also use Python through
+`reticulate`. For Copernicus Marine, use Python >= 3.10 and install the
+Copernicus Marine Toolbox in the conda environment passed to `conda_env`.
+Install `r-ncdf4` and `r-ncmeta` to enable the R NetCDF fallback used when
+GDAL cannot read Copernicus NetCDF files directly:
+
+```bash
+conda create -n marine_env python=3.10
+conda activate marine_env
+pip install copernicusmarine
+mamba install -c conda-forge r-ncdf4 r-ncmeta
 ```
 
 ## Quick Start
@@ -112,6 +128,7 @@ api_info <- get_api_info("FAOSTAT")
 | `get_invasive_alien_species()` | GBIF/GRIIS - Invasive Species | No | No |
 | `get_osm_feature_class()`, `get_osm_features()` | OpenStreetMap - Geographic Features | No | No |
 | `get_fishstat_data()` | FAO Fishstat - Fishery Statistics | No | No |
+| `list_copernicus_marine_catalogue()`, `download_copernicus_marine()`, `download_and_process_copernicus_marine()` | Copernicus Marine | Yes (username/password) | **Yes** |
 
 ## Quick Start Examples
 
@@ -231,6 +248,29 @@ wb_data <- get_wb_data(
   iso3 = "KEN",
   mrv = 10,
   conda_env = "your_env_name"
+)
+```
+
+### Copernicus Marine - Marine Data
+
+```r
+# Discover catalogue metadata
+catalogue <- list_copernicus_marine_catalogue(
+  contains = c("global", "temperature"),
+  conda_env = "marine_env"
+)
+
+# Download a NetCDF subset and process it as a terra raster
+marine_temp <- download_and_process_copernicus_marine(
+  dataset_id = "cmems_mod_glo_phy-thetao_anfc_0.083deg_P1D-m",
+  output_filename = "marine_temperature.nc",
+  variables = "thetao",
+  bbox = c(-45, -10, -35, 5),
+  start_datetime = "2024-01-01",
+  end_datetime = "2024-01-31",
+  username = "your_username",
+  password = "your_password",
+  conda_env = "marine_env"
 )
 ```
 

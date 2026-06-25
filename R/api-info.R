@@ -52,6 +52,9 @@ get_api_info <- function(api_name = NULL) {
       "get_fishstat_data",
       "download_and_process_ee_image",
       "download_and_process_ee_vector",
+      "list_copernicus_marine_catalogue",
+      "download_copernicus_marine",
+      "download_and_process_copernicus_marine",
       "get_fishwatch_data"
     ),
     api_name = c(
@@ -73,6 +76,9 @@ get_api_info <- function(api_name = NULL) {
       "FAO Fishstat",
       "Google Earth Engine",
       "Google Earth Engine",
+      "Copernicus Marine",
+      "Copernicus Marine",
+      "Copernicus Marine",
       "Global Fishing Watch"
     ),
     base_url = c(
@@ -94,6 +100,9 @@ get_api_info <- function(api_name = NULL) {
       "N/A (R package data)",
       "https://earthengine.google.com/",
       "https://earthengine.google.com/",
+      "https://data.marine.copernicus.eu/",
+      "https://data.marine.copernicus.eu/",
+      "https://data.marine.copernicus.eu/",
       "N/A (R package data)"
     ),
     api_docs_url = c(
@@ -115,6 +124,9 @@ get_api_info <- function(api_name = NULL) {
       "https://github.com/socialcopsdev/fishstat",
       "https://developers.google.com/earth-engine",
       "https://developers.google.com/earth-engine",
+      "https://toolbox-docs.marine.copernicus.eu/",
+      "https://toolbox-docs.marine.copernicus.eu/",
+      "https://toolbox-docs.marine.copernicus.eu/",
       "https://github.com/GlobalFishingWatch/gfwr/"
     ),
     requires_python = c(
@@ -136,6 +148,9 @@ get_api_info <- function(api_name = NULL) {
       FALSE,
       TRUE, # Google Earth Engine requires Python packages
       TRUE, # Google Earth Engine requires Python packages
+      TRUE, # Copernicus Marine requires Python package
+      TRUE, # Copernicus Marine requires Python package
+      TRUE, # Copernicus Marine requires Python package
       FALSE
     ),
     python_packages = c(
@@ -157,6 +172,9 @@ get_api_info <- function(api_name = NULL) {
       NA,
       "ee, geemap",
       "ee, geemap",
+      "copernicusmarine",
+      "copernicusmarine",
+      "copernicusmarine",
       NA
     ),
     r_packages = c(
@@ -178,6 +196,9 @@ get_api_info <- function(api_name = NULL) {
       "fishstat",
       NA,
       NA,
+      NA,
+      NA,
+      "terra",
       "gfwr"
     ),
     requires_auth = c(
@@ -199,6 +220,9 @@ get_api_info <- function(api_name = NULL) {
       FALSE,
       TRUE, # Google Earth Engine requires authentication
       TRUE, # Google Earth Engine requires authentication
+      TRUE, # Copernicus Marine requires authentication
+      TRUE, # Copernicus Marine requires authentication
+      TRUE, # Copernicus Marine requires authentication
       TRUE # Global Fishing Watch requires API key
     ),
     description = c(
@@ -220,6 +244,9 @@ get_api_info <- function(api_name = NULL) {
       "FAO Fisheries Statistics - fishery production data",
       "Google Earth Engine - satellite imagery and raster data processing",
       "Google Earth Engine - vector data and feature collection processing",
+      "Copernicus Marine - catalogue metadata discovery",
+      "Copernicus Marine - marine data subset downloads",
+      "Copernicus Marine - marine NetCDF subset downloads and raster processing",
       "Global Fishing Watch - apparent fishing effort and vessel tracking data"
     ),
     stringsAsFactors = FALSE
