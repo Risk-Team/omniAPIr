@@ -636,25 +636,59 @@ download_and_process_copernicus_marine <- function(
 }
 
 .read_copernicus_raster <- function(file, variables = NULL) {
-  raster_object <- tryCatch(
+  is_netcdf <- grepl("\\.(nc|netcdf)$", file, ignore.case = TRUE)
+
+  if (is_netcdf && requireNamespace("stars", quietly = TRUE)) {
+    raster_object <- tryCatch(
+      .read_copernicus_netcdf_with_stars(file, variables),
+      error = function(e) e
+    )
+
+    if (inherits(raster_object, "SpatRaster")) {
+      return(raster_object)
+    }
+  } else {
+    raster_object <- NULL
+  }
+
+  terra_object <- tryCatch(
     terra::rast(file),
     error = function(e) e
   )
 
-  if (inherits(raster_object, "SpatRaster")) {
-    return(raster_object)
+  if (inherits(terra_object, "SpatRaster")) {
+    return(terra_object)
   }
 
-  if (!requireNamespace("stars", quietly = TRUE)) {
+  if (is_netcdf && !requireNamespace("stars", quietly = TRUE)) {
     stop(
-      "Failed to read Copernicus Marine NetCDF with terra, and the stars ",
-      "package is not installed. Install r-ncdf4 and r-ncmeta, or fix the ",
-      "GDAL NetCDF driver for terra. terra error: ",
-      conditionMessage(raster_object),
+      "Failed to read Copernicus Marine NetCDF with terra, and the stars package ",
+      "is not installed. Install r-stars, r-ncdf4, and r-ncmeta, or fix the GDAL ",
+      "NetCDF driver for terra. terra error: ",
+      conditionMessage(terra_object),
       call. = FALSE
     )
   }
 
+  if (is_netcdf) {
+    stop(
+      "Failed to read Copernicus Marine NetCDF with stars::read_ncdf() or ",
+      "terra::rast(). stars error: ",
+      conditionMessage(raster_object),
+      " terra error: ",
+      conditionMessage(terra_object),
+      call. = FALSE
+    )
+  }
+
+  stop(
+    "Failed to read Copernicus Marine raster with terra::rast(). terra error: ",
+    conditionMessage(terra_object),
+    call. = FALSE
+  )
+}
+
+.read_copernicus_netcdf_with_stars <- function(file, variables = NULL) {
   var_names <- if (is.null(variables)) NULL else as.character(variables)
 
   if (is.null(var_names) || length(var_names) == 0) {

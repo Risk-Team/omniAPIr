@@ -80,6 +80,56 @@ test_that("Copernicus Marine list arguments remain Python-compatible lists", {
   expect_equal(variables, list("thetao"))
 })
 
+test_that("Copernicus Marine NetCDF rasters prefer stars before terra", {
+  skip_if_not_installed("stars")
+
+  calls <- character()
+  fake_raster <- terra::rast(nrows = 1, ncols = 1)
+
+  local_mocked_bindings(
+    .read_copernicus_netcdf_with_stars = function(file, variables = NULL) {
+      calls <<- c(calls, "stars")
+      expect_equal(file, "subset.nc")
+      expect_equal(variables, "thetao")
+      fake_raster
+    },
+    .package = "omniAPIr"
+  )
+
+  result <- omniAPIr:::.read_copernicus_raster("subset.nc", "thetao")
+
+  expect_true(inherits(result, "SpatRaster"))
+  expect_identical(calls, "stars")
+})
+
+test_that("Copernicus Marine NetCDF rasters fall back to terra when stars fails", {
+  skip_if_not_installed("stars")
+
+  calls <- character()
+  fake_raster <- terra::rast(nrows = 1, ncols = 1)
+
+  local_mocked_bindings(
+    .read_copernicus_netcdf_with_stars = function(file, variables = NULL) {
+      calls <<- c(calls, "stars")
+      stop("stars failed", call. = FALSE)
+    },
+    .package = "omniAPIr"
+  )
+  local_mocked_bindings(
+    rast = function(x, ...) {
+      calls <<- c(calls, "terra")
+      expect_equal(x, "subset.nc")
+      fake_raster
+    },
+    .package = "terra"
+  )
+
+  result <- omniAPIr:::.read_copernicus_raster("subset.nc", "thetao")
+
+  expect_true(inherits(result, "SpatRaster"))
+  expect_identical(calls, c("stars", "terra"))
+})
+
 test_that("Copernicus Marine is listed in API registry", {
   result <- get_api_info("Copernicus Marine")
 

@@ -41,14 +41,14 @@ pip install wbgapi
 Google Earth Engine and Copernicus Marine functions also use Python through
 `reticulate`. For Copernicus Marine, use Python >= 3.10 and install the
 Copernicus Marine Toolbox in the conda environment passed to `conda_env`.
-Install `r-ncdf4` and `r-ncmeta` to enable the R NetCDF fallback used when
-GDAL cannot read Copernicus NetCDF files directly:
+Install `r-stars`, `r-ncdf4`, and `r-ncmeta` to enable the preferred R NetCDF
+reader used for Copernicus NetCDF files:
 
 ```bash
 conda create -n marine_env python=3.10
 conda activate marine_env
 pip install copernicusmarine
-mamba install -c conda-forge r-ncdf4 r-ncmeta
+mamba install -c conda-forge r-stars r-ncdf4 r-ncmeta
 ```
 
 ## Quick Start
