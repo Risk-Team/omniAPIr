@@ -14,7 +14,8 @@ get_faostat_data(
   iso3 = NULL,
   release = NULL,
   verbose = FALSE,
-  max_retries = 3
+  max_retries = 3,
+  exclude_aggregates = TRUE
 )
 }
 \arguments{
@@ -42,10 +43,15 @@ Default is NULL (auto-set to "7S2025" for CAHD).}
 
 \item{max_retries}{Integer. Maximum number of retry attempts for failed requests.
 Default is 3.}
+
+\item{exclude_aggregates}{Logical. If TRUE (default), filters out regional
+and aggregate areas, returning only data for individual countries with
+valid ISO3 codes.}
 }
 \value{
 A data.frame with columns: isocode, item_code, Item, element_code,
-element_name, Year, Value, Unit.
+  element_name, Year, Value, Unit.
+  By default, only includes individual countries (aggregates excluded).
 }
 \description{
 Retrieves agricultural statistics from the Food and Agriculture Organization
@@ -109,6 +115,10 @@ Use \code{list_faostat_metadata()} to discover available databases, elements, an
   \item \code{list_faostat_metadata("elements", database = "QCL")} - List elements
   \item \code{list_faostat_metadata("items", database = "QCL")} - List items
 }
+
+**Aggregate Filtering:** By default, the function excludes regional and other
+aggregates to return only individual country data. Set
+`exclude_aggregates = FALSE` to include all areas returned by FAOSTAT.
 }
 \examples{
 \dontrun{

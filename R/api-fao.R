@@ -357,9 +357,13 @@ list_faostat_metadata <- function(
 #' @param verbose Logical. If TRUE, prints detailed progress messages. Default is FALSE.
 #' @param max_retries Integer. Maximum number of retry attempts for failed requests.
 #'   Default is 3.
+#' @param exclude_aggregates Logical. If TRUE (default), filters out regional
+#'   and aggregate areas, returning only data for individual countries with
+#'   valid ISO3 codes.
 #'
 #' @return A data.frame with columns: isocode, item_code, Item, element_code,
 #'   element_name, Year, Value, Unit.
+#'   By default, only includes individual countries (aggregates excluded).
 #'
 #' @details
 #' API Documentation: \url{https://www.fao.org/faostat/en/#data}
@@ -416,6 +420,10 @@ list_faostat_metadata <- function(
 #'   \item \code{list_faostat_metadata("elements", database = "QCL")} - List elements
 #'   \item \code{list_faostat_metadata("items", database = "QCL")} - List items
 #' }
+#'
+#' **Aggregate Filtering:** By default, the function excludes regional and other
+#' aggregates to return only individual country data. Set
+#' `exclude_aggregates = FALSE` to include all areas returned by FAOSTAT.
 #'
 #' @export
 #'
@@ -547,7 +555,8 @@ get_faostat_data <- function(
   iso3 = NULL,
   release = NULL,
   verbose = FALSE,
-  max_retries = 3
+  max_retries = 3,
+  exclude_aggregates = TRUE
 ) {
   if (verbose) {
     message(sprintf("Automatically fetching last %d years of data", mrv))
@@ -1133,6 +1142,37 @@ get_faostat_data <- function(
       message("No data found even with expanded year range")
       return(data.frame())
     }
+  }
+
+  # Filter out aggregates by validating ISO codes (if requested)
+  if (exclude_aggregates && nrow(result) > 0 && "isocode" %in% names(result)) {
+    initial_rows <- nrow(result)
+
+    result <- result %>%
+      dplyr::mutate(
+        is_valid_country = !is.na(countrycode::countrycode(
+          isocode,
+          origin = "iso3c",
+          destination = "country.name",
+          warn = FALSE
+        ))
+      ) %>%
+      dplyr::filter(is_valid_country) %>%
+      dplyr::select(-is_valid_country)
+
+    filtered_rows <- initial_rows - nrow(result)
+
+    if (verbose && filtered_rows > 0) {
+      message(sprintf(
+        "  Excluded %s aggregate rows",
+        format(filtered_rows, big.mark = ",")
+      ))
+    }
+  }
+
+  if (nrow(result) == 0) {
+    message("No FAOSTAT country data found after excluding aggregates")
+    return(result)
   }
 
   message(sprintf(

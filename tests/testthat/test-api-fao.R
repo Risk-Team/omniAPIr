@@ -106,6 +106,67 @@ test_that("get_faostat_data works with crop yield", {
     expect_true(nrow(result) > 0)
 })
 
+test_that("get_faostat_data excludes aggregate ISO3 areas by default", {
+    csv <- paste(
+        "Area Code (ISO3),Item Code,Item,Element Code,Element,Year,Value,Unit",
+        "KEN,866,Cattle,2111,Stocks,2024,1000,Head",
+        "WLD,866,Cattle,2111,Stocks,2024,2000,Head",
+        sep = "\n"
+    )
+
+    local_mocked_bindings(
+        .get_faostat_token = function(verbose = FALSE) "token",
+        .package = "omniAPIr"
+    )
+    local_mocked_bindings(
+        req_perform = function(req) {
+            httr2::response(body = charToRaw(csv))
+        },
+        .package = "httr2"
+    )
+
+    result <- suppressMessages(get_faostat_data(
+        element = "2111",
+        item = "cattle",
+        database = "QCL",
+        mrv = 3,
+        verbose = FALSE
+    ))
+
+    expect_equal(result$isocode, "KEN")
+})
+
+test_that("get_faostat_data can include aggregate ISO3 areas", {
+    csv <- paste(
+        "Area Code (ISO3),Item Code,Item,Element Code,Element,Year,Value,Unit",
+        "KEN,866,Cattle,2111,Stocks,2024,1000,Head",
+        "WLD,866,Cattle,2111,Stocks,2024,2000,Head",
+        sep = "\n"
+    )
+
+    local_mocked_bindings(
+        .get_faostat_token = function(verbose = FALSE) "token",
+        .package = "omniAPIr"
+    )
+    local_mocked_bindings(
+        req_perform = function(req) {
+            httr2::response(body = charToRaw(csv))
+        },
+        .package = "httr2"
+    )
+
+    result <- suppressMessages(get_faostat_data(
+        element = "2111",
+        item = "cattle",
+        database = "QCL",
+        mrv = 3,
+        verbose = FALSE,
+        exclude_aggregates = FALSE
+    ))
+
+    expect_equal(result$isocode, c("KEN", "WLD"))
+})
+
 test_that("list_faostat_metadata works for databases", {
     skip_if_not_installed("httr")
 
