@@ -111,7 +111,15 @@ utils::globalVariables(c(
     "label",
     "unit",
     "year",
+    "item_code",
     "item_name",
+    "element_code",
     "element_name",
-    "Area.Code..ISO3."
+    "Area.Code..ISO3.",
+    "domain_code",
+    "domain_name",
+    "database_code",
+    "database_name",
+    "aggregate_type",
+    "code_list"
 ))

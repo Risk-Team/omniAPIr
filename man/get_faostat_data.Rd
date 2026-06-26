@@ -19,7 +19,7 @@ get_faostat_data(
 }
 \arguments{
 \item{element}{Character or numeric. Element code specifying the type of
-measurement (e.g., "2111" for livestock stocks, "2413" for crop production, "6120" for cost indicators).}
+measurement (e.g., "2111" for livestock stocks, "2413" for crop yield, "2510" for production quantity, "6120" for value indicators).}
 
 \item{item}{Character or numeric. Item code(s) or common names. When use_lookup
 is TRUE, accepts friendly names like "cattle", "wheat", "healthy_diet", etc.}
@@ -36,7 +36,7 @@ common names to item codes. Default is TRUE.}
 \item{iso3}{Character. ISO3 country code to filter data. Default is NULL (all countries).}
 
 \item{release}{Character. Release version for CAHD database (e.g., "7S2025" for July 2025).
-Default is NULL (auto-set to latest for CAHD).}
+Default is NULL (auto-set to "7S2025" for CAHD).}
 
 \item{verbose}{Logical. If TRUE, prints detailed progress messages. Default is FALSE.}
 
@@ -44,14 +44,15 @@ Default is NULL (auto-set to latest for CAHD).}
 Default is 3.}
 }
 \value{
-A data.frame with columns: isocode, Item, Year, Value, Unit, element_name.
+A data.frame with columns: isocode, item_code, Item, element_code,
+element_name, Year, Value, Unit.
 }
 \description{
 Retrieves agricultural statistics from the Food and Agriculture Organization
 Statistics (FAOSTAT) API with built-in lookup tables for common items.
 
 **Note:** This function is designed for specific datasets and is not comprehensive.
-It works best with QCL, FBS, FS, and CAHD databases and common agricultural elements (2111, 2413, 2515, 7209, 664, 674, 645, 6120).
+It works best with QCL, FBS, FS, CAHD, RFN, RFB, RP, and RL databases and common agricultural elements (2111, 2413, 2510, 2515, 7209, 664, 674, 645, 6120).
 }
 \details{
 API Documentation: \url{https://www.fao.org/faostat/en/#data}
@@ -66,9 +67,10 @@ It currently works with a limited set of FAOSTAT databases and elements.
   \item \strong{Database: FS (Food Security)} - Food security indicators (3-year averages)
   \item \strong{Database: CAHD (Cost and Affordability of a Healthy Diet)} - Diet cost indicators
   \item \strong{Element 2111 (Stocks)} - Livestock population data
-  \item \strong{Element 2413 (Production)} - Crop production data
+  \item \strong{Element 2413 (Yield)} - Crop yield data
+  \item \strong{Element 2510 (Production Quantity)} - Crop and fertilizer production data where available
   \item \strong{Element 2515 (Agricultural Use)} - Fertilizer and pesticide use
-  \item \strong{Element 7209 (Land Use)} - Land use statistics
+  \item \strong{Element 7209 (Share in Land area)} - Land use share statistics
   \item \strong{Element 664 (Food supply kcal/capita/day)} - Dietary energy supply
   \item \strong{Element 674 (Protein supply quantity)} - Protein supply data
   \item \strong{Element 645 (Food supply quantity kg/capita/year)} - Food supply by food group
@@ -78,11 +80,12 @@ It currently works with a limited set of FAOSTAT databases and elements.
 **Built-in lookup tables** support:
 \itemize{
   \item \strong{Animals (Element 2111):} cattle, sheep, chicken, goats, pigs, horses, buffalo, camels, rabbits, ducks
-  \item \strong{Crops (Element 2413):} wheat, rice, maize, barley, oats, rye, millet, sorghum, soybeans, sunflower, rapeseed, cotton, sugarcane, sugar_beet, potatoes, cassava
-  \item \strong{Fertilizers (Element 2515):} npk, nitrogen, phosphate, potash, urea, ammonium_sulfate, calcium_phosphate, pesticides_total
-  \item \strong{Land use (Element 7209):} agricultural_land, forest_land
-  \item \strong{Food Balance Sheets (Elements 664, 674):} grand_total, total (Item aggregated: Grand Total, code 2901)
-  \item \strong{Food Balance Sheets (Element 645):} cereals, starchy_roots, pulses, treenuts, vegetables, fruits, eggs, meat, fish, vegetable_oils (aggregated food groups)
+  \item \strong{Crops (Elements 2413 and 2510, QCL database):} wheat, rice, maize, barley, oats, rye, millet, sorghum, soybeans, sunflower, rapeseed, cotton, sugarcane, sugar_beet, potatoes, cassava
+  \item \strong{Fertilizer nutrients (Element 2515, RFN database):} nitrogen, phosphate, potash
+  \item \strong{Fertilizer products (Elements 2510 and 2515, RFB database):} npk, urea, ammonium_sulfate
+  \item \strong{Pesticides (Element 2515, RP database):} pesticides_total
+  \item \strong{Land use (Element 7209, RL database):} agricultural_land, forest_land
+  \item \strong{Food Balance Sheets (Elements 645, 664, 674):} grand_total, total, cereals, starchy_roots, pulses, treenuts, vegetables, fruits, eggs, meat, fish, milk, vegetable_oils (aggregated food groups)
   \item \strong{Food Security SDG indicators (Element 6120 - FS database):} undernourishment/pou/sdg_2_1_1 (SDG 2.1.1), food_insecurity/fies/sdg_2_1_2 (SDG 2.1.2), cereals_roots_tubers (3-year averages)
   \item \strong{CAHD Cost Indicators (Element 6120 - CAHD database):} healthy_diet, starchy_staples, animal_source_food, vegetables, fruits (cost in PPP$/person/day)
   \item \strong{CAHD Affordability Indicators (Element 6120 - CAHD database):} people_unable_afford/nua_millions (millions), percent_unable_afford/pua_percent (%)
@@ -90,12 +93,12 @@ It currently works with a limited set of FAOSTAT databases and elements.
 
 **Limitations:**
 \itemize{
-  \item Only works with specific element codes (2111, 2413, 2515, 7209, 664, 674, 645, 6120)
-  \item Primarily designed for QCL, FBS, FS, and CAHD databases
+  \item Only works with specific element codes (2111, 2413, 2510, 2515, 7209, 664, 674, 645, 6120)
+  \item Primarily designed for QCL, FBS, FS, CAHD, RFN, RFB, RP, and RL databases
   \item Lookup tables are limited to common agricultural items
   \item For other databases/elements, use \code{use_lookup = FALSE} and provide exact codes
   \item FS database uses 3-year averages (e.g., 2000 represents 2000-2002)
-  \item CAHD database requires release parameter (auto-set to latest if not specified)
+  \item CAHD database requires release parameter (auto-set to "7S2025" if not specified)
 }
 
 **Discovering Available Data:**
@@ -123,7 +126,7 @@ cattle_data <- get_faostat_data(
   mrv = 20
 )
 
-# Get crop production for multiple crops
+# Get crop yield for multiple crops
 crop_data <- get_faostat_data(
   element = "2413",
   item = c("wheat", "maize", "rice"),
@@ -132,7 +135,7 @@ crop_data <- get_faostat_data(
 
 # Use item codes directly (without lookup)
 wheat_data <- get_faostat_data(
-  element = "5510",
+  element = "2510",
   item = "15",
   database = "QCL",
   use_lookup = FALSE

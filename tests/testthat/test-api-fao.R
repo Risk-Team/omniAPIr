@@ -90,7 +90,7 @@ test_that("get_faostat_data works with livestock data", {
     expect_equal(unique(result$isocode), "USA")
 })
 
-test_that("get_faostat_data works with crop production", {
+test_that("get_faostat_data works with crop yield", {
     skip_if_not_installed("httr")
 
     result <- get_faostat_data(

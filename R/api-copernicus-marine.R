@@ -638,6 +638,15 @@ download_and_process_copernicus_marine <- function(
 .read_copernicus_raster <- function(file, variables = NULL) {
   is_netcdf <- grepl("\\.(nc|netcdf)$", file, ignore.case = TRUE)
 
+  terra_object <- tryCatch(
+    terra::rast(file),
+    error = function(e) e
+  )
+
+  if (inherits(terra_object, "SpatRaster")) {
+    return(terra_object)
+  }
+
   if (is_netcdf && requireNamespace("stars", quietly = TRUE)) {
     raster_object <- tryCatch(
       .read_copernicus_netcdf_with_stars(file, variables),
@@ -649,15 +658,6 @@ download_and_process_copernicus_marine <- function(
     }
   } else {
     raster_object <- NULL
-  }
-
-  terra_object <- tryCatch(
-    terra::rast(file),
-    error = function(e) e
-  )
-
-  if (inherits(terra_object, "SpatRaster")) {
-    return(terra_object)
   }
 
   if (is_netcdf && !requireNamespace("stars", quietly = TRUE)) {
@@ -672,11 +672,11 @@ download_and_process_copernicus_marine <- function(
 
   if (is_netcdf) {
     stop(
-      "Failed to read Copernicus Marine NetCDF with stars::read_ncdf() or ",
-      "terra::rast(). stars error: ",
-      conditionMessage(raster_object),
-      " terra error: ",
+      "Failed to read Copernicus Marine NetCDF with terra::rast() or ",
+      "stars::read_ncdf(). terra error: ",
       conditionMessage(terra_object),
+      " stars error: ",
+      conditionMessage(raster_object),
       call. = FALSE
     )
   }

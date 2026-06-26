@@ -41,14 +41,15 @@ pip install wbgapi
 Google Earth Engine and Copernicus Marine functions also use Python through
 `reticulate`. For Copernicus Marine, use Python >= 3.10 and install the
 Copernicus Marine Toolbox in the conda environment passed to `conda_env`.
-Install `r-stars`, `r-ncdf4`, and `r-ncmeta` to enable the preferred R NetCDF
-reader used for Copernicus NetCDF files:
+Copernicus Marine NetCDF files are read with `terra::rast()`. You can also
+install `r-stars`, `r-ncdf4`, and `r-ncmeta` to enable the optional fallback
+reader for NetCDF files that your local GDAL build cannot open through terra:
 
 ```bash
 conda create -n marine_env python=3.10
 conda activate marine_env
 pip install copernicusmarine
-mamba install -c conda-forge r-stars r-ncdf4 r-ncmeta
+mamba install -c conda-forge r-terra r-stars r-ncdf4 r-ncmeta
 ```
 
 ## Quick Start
@@ -177,16 +178,16 @@ cattle_data <- get_faostat_data(
   mrv = 20
 )
 
-# Get multiple crop production data
+# Get multiple crop yield data
 crop_data <- get_faostat_data(
-  element = "2413",                      # Production
+  element = "2413",                      # Yield
   item = c("wheat", "maize", "rice"),    # Multiple items
   database = "QCL"
 )
 
 # Option 2: Use exact codes (see function documentation for supported elements/items)
 wheat_production <- get_faostat_data(
-  element = "5510",  # Production
+  element = "2510",  # Production Quantity
   item = "15",       # Wheat
   database = "QCL",
   iso3 = "USA",
@@ -369,8 +370,11 @@ ilo_data <- get_ilo_data(
 FAOSTAT includes friendly name lookups. EMPRES validates public API filter values before requesting data:
 
 ```r
-# FAOSTAT crops
+# FAOSTAT crop yield
 get_faostat_data(element = "2413", item = "wheat", database = "QCL")
+
+# FAOSTAT crop production quantity
+get_faostat_data(element = "2510", item = "wheat", database = "QCL")
 
 # FAOSTAT animals
 get_faostat_data(element = "2111", item = c("cattle", "sheep", "goats"), database = "QCL")
