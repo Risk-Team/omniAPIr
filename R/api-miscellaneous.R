@@ -343,8 +343,42 @@ osm_sql_quote_value <- function(x) {
 }
 
 
-build_osm_where_clause <- function(tag_sets) {
+osm_default_layer_tags <- function(layer_name) {
+  switch(
+    layer_name,
+    points = c("barrier", "highway", "ref", "address", "is_in", "place", "man_made"),
+    lines = c("highway", "waterway", "aerialway", "barrier", "man_made", "railway"),
+    multipolygons = c(
+      "type",
+      "aeroway",
+      "amenity",
+      "admin_level",
+      "barrier",
+      "boundary",
+      "building",
+      "craft",
+      "geological",
+      "historic",
+      "land_area",
+      "landuse",
+      "leisure",
+      "man_made",
+      "military",
+      "natural",
+      "office",
+      "place",
+      "shop",
+      "sport",
+      "tourism"
+    ),
+    character()
+  )
+}
+
+
+build_osm_where_clause <- function(tag_sets, column_tags = names(tag_sets)) {
   tag_sets <- normalize_osm_tag_set(tag_sets)
+  column_tags <- intersect(names(tag_sets), column_tags)
 
   if (length(tag_sets) == 0) {
     stop("At least one OSM tag value is required.", call. = FALSE)
@@ -352,18 +386,37 @@ build_osm_where_clause <- function(tag_sets) {
 
   conditions <- lapply(names(tag_sets), function(tag) {
     values <- tag_sets[[tag]]
-    tag_sql <- osm_sql_quote_identifier(tag)
-    if (length(values) == 1) {
-      sprintf("%s = %s", tag_sql, osm_sql_quote_value(values))
-    } else {
-      quoted_values <- paste(vapply(
-        values,
-        osm_sql_quote_value,
-        character(1),
-        USE.NAMES = FALSE
-      ), collapse = ", ")
-      sprintf("%s IN (%s)", tag_sql, quoted_values)
+    tag_conditions <- character()
+
+    if (tag %in% column_tags) {
+      tag_sql <- osm_sql_quote_identifier(tag)
+      tag_conditions <- c(tag_conditions, if (length(values) == 1) {
+        sprintf("%s = %s", tag_sql, osm_sql_quote_value(values))
+      } else {
+        quoted_values <- paste(vapply(
+          values,
+          osm_sql_quote_value,
+          character(1),
+          USE.NAMES = FALSE
+        ), collapse = ", ")
+        sprintf("%s IN (%s)", tag_sql, quoted_values)
+      })
     }
+
+    other_tags_expr <- paste(vapply(
+      values,
+      function(value) {
+        sprintf(
+          "other_tags LIKE %s",
+          osm_sql_quote_value(paste0("%\"", tag, "\"=>\"", value, "\"%"))
+        )
+      },
+      character(1),
+      USE.NAMES = FALSE
+    ), collapse = " OR ")
+    tag_conditions <- c(tag_conditions, other_tags_expr)
+
+    sprintf("(%s)", paste(tag_conditions, collapse = " OR "))
   })
 
   paste0("(", paste(conditions, collapse = " OR "), ")")
@@ -413,14 +466,25 @@ filter_osm_sf_by_tags <- function(x, tag_set, feature_class, feature_label) {
 
   tag_set <- normalize_osm_tag_set(tag_set)
   matches <- rep(FALSE, nrow(x))
+  other_tags <- if ("other_tags" %in% names(x)) {
+    as.character(x$other_tags)
+  } else {
+    rep(NA_character_, nrow(x))
+  }
 
   for (tag_name in names(tag_set)) {
-    if (!tag_name %in% names(x)) {
-      next
+    if (tag_name %in% names(x)) {
+      tag_values <- as.character(x[[tag_name]])
+      matches <- matches | (!is.na(tag_values) & tag_values %in% tag_set[[tag_name]])
     }
 
-    tag_values <- as.character(x[[tag_name]])
-    matches <- matches | (!is.na(tag_values) & tag_values %in% tag_set[[tag_name]])
+    other_tag_patterns <- paste0("\"", tag_name, "\"=>\"", tag_set[[tag_name]], "\"")
+    other_tag_matches <- Reduce(
+      `|`,
+      lapply(other_tag_patterns, grepl, x = other_tags, fixed = TRUE),
+      init = rep(FALSE, length(other_tags))
+    )
+    matches <- matches | (!is.na(other_tags) & other_tag_matches)
   }
 
   result <- x[matches, , drop = FALSE]
@@ -457,6 +521,7 @@ filter_osm_features_by_tags <- function(osm_features, tag_set,
 osm_cache_file <- function(region_sf, provider, match_level, layers, tag_sets, cache_dir) {
   region_4326 <- sf::st_transform(region_sf, 4326)
   cache_key <- rlang::hash(list(
+    osm_feature_cache_version = 2L,
     region_geometry = sf::st_as_binary(sf::st_geometry(region_4326)),
     provider = provider,
     match_level = match_level,
@@ -465,6 +530,46 @@ osm_cache_file <- function(region_sf, provider, match_level, layers, tag_sets, c
   ))
 
   file.path(cache_dir, paste0("osm_features_", cache_key, ".rds"))
+}
+
+
+prepare_osm_region_boundary <- function(region_sf) {
+  if (is.na(sf::st_crs(region_sf))) {
+    stop("region_sf must have a coordinate reference system.", call. = FALSE)
+  }
+
+  region_sf <- sf::st_transform(region_sf, 4326)
+  region_sf <- suppressWarnings(sf::st_transform(region_sf, 3857))
+  region_sf <- sf::st_make_valid(region_sf)
+  if (any(!sf::st_is_valid(region_sf))) {
+    region_sf <- suppressWarnings(sf::st_buffer(region_sf, 0))
+  }
+  region_sf <- suppressWarnings(sf::st_collection_extract(region_sf, "POLYGON"))
+  region_sf <- sf::st_transform(region_sf, 4326)
+
+  if (nrow(region_sf) == 0 || all(sf::st_is_empty(region_sf))) {
+    stop("region_sf does not contain a valid polygon boundary.", call. = FALSE)
+  }
+  if (any(!sf::st_is_valid(region_sf))) {
+    stop("region_sf could not be repaired to a valid polygon boundary.", call. = FALSE)
+  }
+
+  region_sf
+}
+
+
+osm_bbox_boundary <- function(region_sf) {
+  sf::st_sf(
+    geometry = sf::st_as_sfc(sf::st_bbox(region_sf)),
+    crs = sf::st_crs(region_sf)
+  )
+}
+
+
+osm_region_match_point <- function(region_sf) {
+  region_geometry <- sf::st_transform(sf::st_geometry(region_sf), 3857)
+  match_point <- sf::st_point_on_surface(sf::st_union(region_geometry))
+  sf::st_transform(match_point, 4326)
 }
 
 
@@ -656,7 +761,8 @@ get_osm_feature_class <- function(
 #' 4. For each layer (points, lines, multipolygons):
 #'    - Ensures tag columns exist via \code{extra_tags} parameter
 #'    - Filters by tags using SQL at the database level (efficient)
-#'    - Spatially clips to region boundaries using GDAL
+#'    - Spatially clips to the region bounding box using GDAL
+#'    - Intersects returned features with a repaired region boundary in R
 #'    - Only filtered results are loaded into R memory
 #' 5. Returns sf objects in WGS84 (EPSG:4326)
 #'
@@ -704,8 +810,10 @@ get_osm_features <- function(
   stopifnot(inherits(region_sf, "sf"))
 
   # ---- Work in EPSG:4326 for osmextract ----
-  region_sf <- sf::st_transform(region_sf, 4326)
+  region_sf <- prepare_osm_region_boundary(region_sf)
   bb <- sf::st_bbox(region_sf)
+  query_boundary <- osm_bbox_boundary(region_sf)
+  region_geometry <- sf::st_union(sf::st_geometry(region_sf))
 
   if (!is.null(cache_dir) && !dir.exists(cache_dir)) {
     dir.create(cache_dir, recursive = TRUE, showWarnings = FALSE)
@@ -724,9 +832,7 @@ get_osm_features <- function(
   }
 
   # ---- Use a point inside the region just for matching the provider zone ----
-  match_geom <- region_sf |>
-    sf::st_union() |>
-    sf::st_point_on_surface()
+  match_geom <- osm_region_match_point(region_sf)
 
   # Pre-check which extract will be used and how big it is
   match_info <- osmextract::oe_match(
@@ -775,21 +881,27 @@ Refusing to download. Try:
   }
 
   tag_sets <- normalize_osm_tag_set(tag_sets)
-  where_clause <- build_osm_where_clause(tag_sets)
   extra_tags <- names(tag_sets)
 
   if (verbose) {
-    message("SQL WHERE clause: ", where_clause)
+    message("Requested OSM tags: ", paste(extra_tags, collapse = ", "))
     message("Ensuring columns: ", paste(extra_tags, collapse = ", "))
     message("Downloading OSM extract and querying layers...")
   }
 
   # ---- Helper: Query a specific layer with error handling ----
-  query_layer <- function(layer_name, where_clause, extra_tags, verbose) {
+  query_layer <- function(layer_name, extra_tags, verbose) {
     tryCatch(
       {
         if (verbose) {
           message(sprintf("Querying %s layer...", layer_name))
+        }
+        where_clause <- build_osm_where_clause(
+          tag_sets,
+          column_tags = union(osm_default_layer_tags(layer_name), extra_tags)
+        )
+        if (verbose) {
+          message("  SQL WHERE clause: ", where_clause)
         }
 
         sql_query <- sprintf(
@@ -811,13 +923,16 @@ Refusing to download. Try:
           },
           max_file_size = max_file_size,
           quiet = !verbose,
-          boundary = region_sf, # **full polygon used for clipping**
+          boundary = query_boundary,
           boundary_type = "clipsrc"
         )
 
         if (!is.null(result) && nrow(result) > 0) {
-          # Ensure CRS is 4326
           result <- sf::st_transform(result, 4326)
+          result <- suppressWarnings(sf::st_intersection(
+            result,
+            region_geometry
+          ))
 
           if (verbose) {
             message(sprintf(
@@ -835,12 +950,15 @@ Refusing to download. Try:
         }
       },
       error = function(e) {
+        error_message <- sprintf(
+          "Error querying OSM %s layer: %s",
+          layer_name,
+          conditionMessage(e)
+        )
         if (verbose) {
-          message(sprintf(
-            "  Error querying %s: %s",
-            layer_name,
-            conditionMessage(e)
-          ))
+          message("  ", error_message)
+        } else {
+          warning(error_message, call. = FALSE)
         }
         empty_osm_sf()
       }
@@ -849,19 +967,19 @@ Refusing to download. Try:
 
   # ---- Query only requested layers ----
   pts <- if ("points" %in% layers) {
-    query_layer("points", where_clause, extra_tags, verbose)
+    query_layer("points", extra_tags, verbose)
   } else {
     empty_osm_sf()
   }
 
   lines <- if ("lines" %in% layers) {
-    query_layer("lines", where_clause, extra_tags, verbose)
+    query_layer("lines", extra_tags, verbose)
   } else {
     empty_osm_sf()
   }
 
   poly <- if ("multipolygons" %in% layers) {
-    query_layer("multipolygons", where_clause, extra_tags, verbose)
+    query_layer("multipolygons", extra_tags, verbose)
   } else {
     empty_osm_sf()
   }

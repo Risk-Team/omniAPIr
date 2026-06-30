@@ -44,6 +44,87 @@ test_that("OSM tag set combining preserves repeated keys", {
     expect_equal(length(combined$amenity), length(unique(combined$amenity)))
 })
 
+test_that("OSM SQL only uses layer-supported columns", {
+    tag_sets <- list(
+        amenity = c("hospital", "school"),
+        highway = "primary",
+        shop = "supermarket"
+    )
+
+    points_clause <- omniAPIr:::build_osm_where_clause(
+        tag_sets,
+        column_tags = omniAPIr:::osm_default_layer_tags("points")
+    )
+    lines_clause <- omniAPIr:::build_osm_where_clause(
+        tag_sets,
+        column_tags = omniAPIr:::osm_default_layer_tags("lines")
+    )
+    promoted_points_clause <- omniAPIr:::build_osm_where_clause(
+        tag_sets,
+        column_tags = union(omniAPIr:::osm_default_layer_tags("points"), names(tag_sets))
+    )
+
+    expect_no_match(points_clause, '"amenity" (=|IN)')
+    expect_no_match(points_clause, '"shop" (=|IN)')
+    expect_match(points_clause, 'other_tags LIKE .*"amenity"=>"hospital"')
+    expect_match(points_clause, 'other_tags LIKE .*"shop"=>"supermarket"')
+    expect_match(lines_clause, '"highway" =')
+    expect_match(lines_clause, 'other_tags LIKE .*"amenity"=>"school"')
+    expect_match(promoted_points_clause, '"amenity" IN')
+    expect_match(promoted_points_clause, '"shop" =')
+})
+
+test_that("OSM feature filtering matches tags stored in other_tags", {
+    features <- sf::st_sf(
+        osm_id = c("1", "2", "3"),
+        other_tags = c(
+            '"shop"=>"supermarket"',
+            '"amenity"=>"school","name:en"=>"Example School"',
+            '"amenity"=>"clinic"'
+        ),
+        geometry = sf::st_sfc(
+            sf::st_point(c(36.8, -1.3)),
+            sf::st_point(c(36.81, -1.31)),
+            sf::st_point(c(36.82, -1.32)),
+            crs = 4326
+        )
+    )
+
+    result <- omniAPIr:::filter_osm_sf_by_tags(
+        features,
+        list(amenity = "school"),
+        feature_class = "schools",
+        feature_label = "Schools"
+    )
+
+    expect_equal(result$osm_id, "2")
+    expect_equal(result$feature_class, "schools")
+    expect_equal(result$feature_label, "Schools")
+})
+
+test_that("OSM region boundary preparation repairs invalid polygons", {
+    bowtie <- sf::st_sf(
+        id = 1,
+        geometry = sf::st_sfc(
+            sf::st_polygon(list(rbind(
+                c(0, 0),
+                c(1, 1),
+                c(1, 0),
+                c(0, 1),
+                c(0, 0)
+            ))),
+            crs = 4326
+        )
+    )
+
+    fixed <- omniAPIr:::prepare_osm_region_boundary(bowtie)
+
+    expect_s3_class(fixed, "sf")
+    expect_true(all(sf::st_is_valid(fixed)))
+    expect_equal(sf::st_crs(fixed)$epsg, 4326)
+    expect_true(all(sf::st_dimension(fixed) == 2))
+})
+
 test_that("empty OSM feature filtering returns empty sf objects", {
     empty_features <- list(
         pts = omniAPIr:::empty_osm_sf(),
