@@ -142,11 +142,62 @@ test_that("get_fishwatch_data combines multiple EEZ responses", {
     expect_equal(result$Lat, c(10, 20))
 })
 
+test_that("get_fishwatch_data normalizes mixed response column types", {
+    local_mocked_bindings(
+        .gfwr_fishing_hours = function(..., region) {
+            if (region == 10) {
+                tibble::tibble(
+                    Lat = 1.5,
+                    Lon = 2.5,
+                    `Time Range` = 2023,
+                    flag = "COL",
+                    `Vessel IDs` = 1,
+                    `Apparent Fishing Hours` = 2
+                )
+            } else {
+                tibble::tibble(
+                    Lat = "3.5",
+                    Lon = "4.5",
+                    `Time Range` = "2023",
+                    flag = "COL",
+                    `Vessel IDs` = "2",
+                    `Apparent Fishing Hours` = "5.25"
+                )
+            }
+        }
+    )
+
+    result <- get_fishwatch_data(
+        temporal_resolution = "YEARLY",
+        start_date = "2023-01-01",
+        end_date = "2024-01-01",
+        region_source = "EEZ",
+        region = c(10, 20),
+        group_by = "FLAG",
+        api_key = "token",
+        verbose = FALSE
+    )
+
+    expect_type(result$Lat, "double")
+    expect_type(result$Lon, "double")
+    expect_type(result$`Time Range`, "double")
+    expect_type(result$`Vessel IDs`, "double")
+    expect_type(result$`Apparent Fishing Hours`, "double")
+    expect_equal(result$Lat, c(1.5, 3.5))
+    expect_equal(result$`Apparent Fishing Hours`, c(2, 5.25))
+})
+
 test_that("get_fishwatch_data rejects partial yearly results", {
     local_mocked_bindings(
         .gfwr_fishing_hours = function(..., region) {
             if (region == 20) stop("yearly request failed")
-            tibble::tibble(Lat = 1)
+            tibble::tibble(
+                Lat = 1,
+                Lon = 2,
+                `Time Range` = 2023,
+                `Vessel IDs` = 1,
+                `Apparent Fishing Hours` = 2
+            )
         }
     )
 

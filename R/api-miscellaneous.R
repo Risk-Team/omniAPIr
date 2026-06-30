@@ -1216,6 +1216,46 @@ get_fishwatch_eez_ids <- function(iso3, api_key = NULL) {
   result
 }
 
+.normalize_fishwatch_data <- function(data, group_by) {
+  if (is.null(data) || nrow(data) == 0L) {
+    return(.empty_fishwatch_data(group_by))
+  }
+
+  required_columns <- c(
+    "Lat",
+    "Lon",
+    "Time Range",
+    "Apparent Fishing Hours"
+  )
+  missing_columns <- setdiff(required_columns, names(data))
+  if (length(missing_columns) > 0L) {
+    stop(
+      "Unexpected Global Fishing Watch response; missing columns: ",
+      paste(missing_columns, collapse = ", ")
+    )
+  }
+
+  if (!"flag" %in% names(data) && identical(group_by, "FLAG")) {
+    data$flag <- NA_character_
+  }
+  if (!"Vessel IDs" %in% names(data)) {
+    data$`Vessel IDs` <- NA_real_
+  }
+
+  data |>
+    dplyr::mutate(
+      Lat = suppressWarnings(as.numeric(.data$Lat)),
+      Lon = suppressWarnings(as.numeric(.data$Lon)),
+      `Time Range` = suppressWarnings(as.numeric(.data$`Time Range`)),
+      `Vessel IDs` = suppressWarnings(as.numeric(.data$`Vessel IDs`)),
+      `Apparent Fishing Hours` =
+        suppressWarnings(as.numeric(.data$`Apparent Fishing Hours`))
+    ) |>
+    dplyr::mutate(
+      dplyr::across(dplyr::any_of("flag"), as.character)
+    )
+}
+
 # HDX HAPI endpoint registry used by get_hdx_hapi().
 .hdx_hapi_endpoints <- c(
   availability = "/api/v2/metadata/data-availability",
@@ -1951,7 +1991,7 @@ get_fishwatch_data <- function(
       )
 
       if (!inherits(result, "error")) {
-        results[[region_index]] <- result
+        results[[region_index]] <- .normalize_fishwatch_data(result, group_by)
         break
       }
 
