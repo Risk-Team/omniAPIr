@@ -10,8 +10,11 @@ get_osm_features(
   verbose = FALSE,
   provider = "geofabrik",
   match_level = 2,
+  match_place = NULL,
   max_download_size_mb = 1500,
   layers = c("points", "lines", "multipolygons"),
+  coverage_check = c("error", "warn", "none"),
+  min_coverage = 0.98,
   cache_dir = NULL
 )
 }
@@ -25,6 +28,28 @@ get_osm_features(
 
 \item{provider}{Character. OSM data provider. Options: "geofabrik" (default),
 "bbbike", "openstreetmap_fr". See \code{osmextract::oe_providers()}.}
+
+\item{match_level}{Integer provider matching level passed to
+\code{osmextract::oe_match()} and \code{osmextract::oe_get()}.}
+
+\item{match_place}{Optional length-one character place name passed to
+\code{osmextract::oe_match()} and \code{osmextract::oe_get()}. When
+\code{NULL}, the provider extract is matched using a point inside
+\code{region_sf}. Supplying a country or region name is safer for
+national or large-area workflows.}
+
+\item{max_download_size_mb}{Maximum matched extract size in MB. Set to
+\code{NA} to disable the check.}
+
+\item{layers}{Character vector of osmextract layers to query.}
+
+\item{coverage_check}{Character. Whether to \code{"error"}, \code{"warn"},
+or do \code{"none"} when the matched provider extract covers less than
+\code{min_coverage} of \code{region_sf}.}
+
+\item{min_coverage}{Minimum fraction of \code{region_sf} that must be
+covered by the matched provider extract when \code{coverage_check} is not
+\code{"none"}.}
 
 \item{cache_dir}{Optional directory used for osmextract downloads and
 converted files.}
@@ -58,7 +83,8 @@ rather than querying the live database.
 4. For each layer (points, lines, multipolygons):
    - Ensures tag columns exist via \code{extra_tags} parameter
    - Filters by tags using SQL at the database level (efficient)
-   - Spatially clips to region boundaries using GDAL
+   - Spatially clips to the region bounding box using GDAL
+   - Intersects returned features with a repaired region boundary in R
    - Only filtered results are loaded into R memory
 5. Returns sf objects in WGS84 (EPSG:4326)
 

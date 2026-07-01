@@ -1472,6 +1472,28 @@ get_fishwatch_eez_ids <- function(iso3, api_key = NULL) {
   gfwr::gfw_ais_fishing_hours(...)
 }
 
+.fishwatch_sleep <- function(seconds) {
+  if (seconds > 0) {
+    Sys.sleep(seconds)
+  }
+}
+
+.fishwatch_is_rate_limit_error <- function(error) {
+  grepl(
+    "HTTP[[:space:]]+429|429 Too Many Requests|Too Many Requests",
+    conditionMessage(error),
+    ignore.case = TRUE
+  )
+}
+
+.fishwatch_retry_wait <- function(error, attempt) {
+  if (.fishwatch_is_rate_limit_error(error)) {
+    return(60)
+  }
+
+  2^attempt
+}
+
 .empty_fishwatch_data <- function(group_by) {
   result <- tibble::tibble(
     Lat = double(),
@@ -2165,6 +2187,8 @@ get_hdx_hapi_population <- function(
 #' the rows. If any request fails after retries, the function errors rather
 #' than returning partial data.
 #'
+#' **Rate limits:** HTTP 429 responses wait 60 seconds before retrying.
+#'
 #' **Region Sources:**
 #' - EEZ: Exclusive Economic Zone
 #' - MPA: Marine Protected Area
@@ -2274,17 +2298,26 @@ get_fishwatch_data <- function(
           " after ",
           max_retries,
           " attempts: ",
-          conditionMessage(result)
+          conditionMessage(result),
+          if (.fishwatch_is_rate_limit_error(result)) {
+            paste0(
+              ". The API is rate limiting requests; retry later or increase max_retries."
+            )
+          } else {
+            ""
+          }
         )
       }
+      wait_time <- .fishwatch_retry_wait(result, attempt)
       if (verbose) {
         message(sprintf(
-          "Attempt %d for region %s failed, retrying...",
+          "Attempt %d for region %s failed, retrying in %.1f seconds...",
           attempt,
-          current_region
+          current_region,
+          wait_time
         ))
       }
-      Sys.sleep(2^attempt)
+      .fishwatch_sleep(wait_time)
     }
   }
 

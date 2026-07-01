@@ -10,9 +10,12 @@ get_osm_feature_class(
   cache_dir = NULL,
   provider = "geofabrik",
   match_level = 2,
+  match_place = NULL,
   max_download_size_mb = 1500,
   layers = c("points", "lines", "multipolygons"),
   as_sf = TRUE,
+  coverage_check = c("error", "warn", "none"),
+  min_coverage = 0.98,
   verbose = FALSE
 )
 }
@@ -30,6 +33,12 @@ combined query results.}
 \item{match_level}{Integer provider matching level passed to
 \code{osmextract::oe_match()} and \code{osmextract::oe_get()}.}
 
+\item{match_place}{Optional length-one character place name passed to
+\code{osmextract::oe_match()} and \code{osmextract::oe_get()}. When
+\code{NULL}, the provider extract is matched using a point inside
+\code{region_sf}. Supplying a country or region name is safer for
+national or large-area workflows.}
+
 \item{max_download_size_mb}{Maximum matched extract size in MB. Set to
 \code{NA} to disable the check.}
 
@@ -37,6 +46,14 @@ combined query results.}
 
 \item{as_sf}{Logical. If TRUE, return sf objects. If FALSE, geometries are
 dropped from returned layers.}
+
+\item{coverage_check}{Character. Whether to \code{"error"}, \code{"warn"},
+or do \code{"none"} when the matched provider extract covers less than
+\code{min_coverage} of \code{region_sf}.}
+
+\item{min_coverage}{Minimum fraction of \code{region_sf} that must be
+covered by the matched provider extract when \code{coverage_check} is not
+\code{"none"}.}
 
 \item{verbose}{Logical. If TRUE, prints progress messages.}
 }

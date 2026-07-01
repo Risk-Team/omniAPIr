@@ -216,6 +216,44 @@ test_that("get_fishwatch_data rejects partial yearly results", {
     )
 })
 
+test_that("get_fishwatch_data waits and retries after rate limits", {
+    calls <- 0
+    waits <- numeric()
+    local_mocked_bindings(
+        .gfwr_fishing_hours = function(..., region) {
+            calls <<- calls + 1
+            if (calls == 1) {
+                stop("HTTP 429 Too Many Requests")
+            }
+            tibble::tibble(
+                Lat = 1,
+                Lon = 2,
+                `Time Range` = 2023,
+                `Vessel IDs` = 1,
+                `Apparent Fishing Hours` = 2
+            )
+        },
+        .fishwatch_sleep = function(seconds) {
+            waits <<- c(waits, seconds)
+        }
+    )
+
+    result <- get_fishwatch_data(
+        temporal_resolution = "YEARLY",
+        start_date = "2023-01-01",
+        end_date = "2024-01-01",
+        region_source = "EEZ",
+        region = 8349,
+        api_key = "token",
+        verbose = FALSE,
+        max_retries = 2
+    )
+
+    expect_equal(calls, 2)
+    expect_equal(waits, 60)
+    expect_equal(nrow(result), 1)
+})
+
 test_that("get_fishwatch_data returns an empty tibble for zero activity", {
     local_mocked_bindings(
         .gfwr_fishing_hours = function(...) NULL

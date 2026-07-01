@@ -85,6 +85,8 @@ contains multiple EEZ IDs, this function requests all of them and combines
 the rows. If any request fails after retries, the function errors rather
 than returning partial data.
 
+**Rate limits:** HTTP 429 responses wait 60 seconds before retrying.
+
 **Region Sources:**
 - EEZ: Exclusive Economic Zone
 - MPA: Marine Protected Area
