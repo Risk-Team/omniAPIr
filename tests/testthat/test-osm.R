@@ -125,6 +125,84 @@ test_that("OSM region boundary preparation repairs invalid polygons", {
     expect_true(all(sf::st_dimension(fixed) == 2))
 })
 
+test_that("OSM match input uses explicit match_place when supplied", {
+    region <- sf::st_sf(
+        id = 1,
+        geometry = sf::st_sfc(sf::st_point(c(36.8, -1.3)), crs = 4326)
+    )
+
+    expect_equal(omniAPIr:::osm_match_input(region, "Kenya"), "Kenya")
+    expect_error(
+        omniAPIr:::osm_match_input(region, ""),
+        "match_place must be a non-empty length-one character value"
+    )
+})
+
+test_that("OSM cache key separates explicit match places", {
+    region <- sf::st_sf(
+        id = 1,
+        geometry = sf::st_sfc(sf::st_point(c(36.8, -1.3)), crs = 4326)
+    )
+    tag_sets <- list(amenity = "school")
+
+    point_cache <- omniAPIr:::osm_cache_file(
+        region_sf = region,
+        provider = "geofabrik",
+        match_level = 2,
+        layers = "points",
+        tag_sets = tag_sets,
+        cache_dir = tempdir()
+    )
+    place_cache <- omniAPIr:::osm_cache_file(
+        region_sf = region,
+        provider = "geofabrik",
+        match_level = 2,
+        layers = "points",
+        tag_sets = tag_sets,
+        cache_dir = tempdir(),
+        match_place = "Kenya"
+    )
+
+    expect_false(identical(point_cache, place_cache))
+})
+
+test_that("OSM extract coverage validation rejects partial provider zones", {
+    india_bbox <- sf::st_as_sfc(sf::st_bbox(c(
+        xmin = 68.1,
+        ymin = 6.7,
+        xmax = 97.2,
+        ymax = 33.2
+    ), crs = 4326))
+    india_region <- sf::st_sf(id = 1, geometry = india_bbox)
+
+    western_match <- list(
+        url = "https://download.geofabrik.de/asia/india/western-zone-latest.osm.pbf",
+        file_size = 216006656
+    )
+    india_match <- list(
+        url = "https://download.geofabrik.de/asia/india-latest.osm.pbf",
+        file_size = 1500000000
+    )
+
+    expect_error(
+        omniAPIr:::validate_osm_extract_coverage(
+            region_sf = india_region,
+            match_info = western_match,
+            provider = "geofabrik",
+            coverage_check = "error",
+            min_coverage = 0.98
+        ),
+        "covers .* of the requested region"
+    )
+    expect_true(omniAPIr:::validate_osm_extract_coverage(
+        region_sf = india_region,
+        match_info = india_match,
+        provider = "geofabrik",
+        coverage_check = "error",
+        min_coverage = 0.50
+    ))
+})
+
 test_that("empty OSM feature filtering returns empty sf objects", {
     empty_features <- list(
         pts = omniAPIr:::empty_osm_sf(),

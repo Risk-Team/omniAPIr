@@ -518,13 +518,15 @@ filter_osm_features_by_tags <- function(osm_features, tag_set,
 }
 
 
-osm_cache_file <- function(region_sf, provider, match_level, layers, tag_sets, cache_dir) {
+osm_cache_file <- function(region_sf, provider, match_level, layers, tag_sets,
+                           cache_dir, match_place = NULL) {
   region_4326 <- sf::st_transform(region_sf, 4326)
   cache_key <- rlang::hash(list(
-    osm_feature_cache_version = 2L,
+    osm_feature_cache_version = 3L,
     region_geometry = sf::st_as_binary(sf::st_geometry(region_4326)),
     provider = provider,
     match_level = match_level,
+    match_place = match_place,
     layers = sort(layers),
     tag_sets = normalize_osm_tag_set(tag_sets)
   ))
@@ -573,6 +575,111 @@ osm_region_match_point <- function(region_sf) {
 }
 
 
+osm_match_input <- function(region_sf, match_place = NULL) {
+  if (!is.null(match_place)) {
+    match_place <- as.character(match_place)
+    if (length(match_place) != 1L || is.na(match_place) || !nzchar(match_place)) {
+      stop("match_place must be a non-empty length-one character value.", call. = FALSE)
+    }
+    return(match_place)
+  }
+
+  osm_region_match_point(region_sf)
+}
+
+
+osm_extract_zone <- function(match_info, provider) {
+  if (is.null(match_info$url) || is.na(match_info$url)) {
+    return(NULL)
+  }
+
+  provider_data <- switch(
+    provider,
+    geofabrik = osmextract::geofabrik_zones,
+    bbbike = osmextract::bbbike_zones,
+    openstreetmap_fr = osmextract::openstreetmap_fr_zones,
+    test = osmextract::test_zones,
+    NULL
+  )
+
+  if (is.null(provider_data) || !"pbf" %in% names(provider_data)) {
+    return(NULL)
+  }
+
+  sf::st_crs(provider_data) <- 4326
+  matched <- provider_data[provider_data$pbf == match_info$url, , drop = FALSE]
+  if (nrow(matched) != 1L) {
+    return(NULL)
+  }
+
+  matched
+}
+
+
+validate_osm_extract_coverage <- function(region_sf, match_info, provider,
+                                          coverage_check = c("error", "warn", "none"),
+                                          min_coverage = 0.98) {
+  coverage_check <- match.arg(coverage_check)
+  if (identical(coverage_check, "none")) {
+    return(invisible(TRUE))
+  }
+
+  if (!is.numeric(min_coverage) || length(min_coverage) != 1L ||
+      is.na(min_coverage) || min_coverage < 0 || min_coverage > 1) {
+    stop("min_coverage must be a numeric value between 0 and 1.", call. = FALSE)
+  }
+
+  extract_zone <- osm_extract_zone(match_info, provider)
+  if (is.null(extract_zone)) {
+    msg <- paste0(
+      "Could not validate OSM extract coverage because the matched extract ",
+      "was not found in the provider zone catalogue."
+    )
+    if (identical(coverage_check, "error")) {
+      stop(msg, call. = FALSE)
+    }
+    warning(msg, call. = FALSE)
+    return(invisible(FALSE))
+  }
+
+  area_crs <- 6933
+  region_area <- sf::st_transform(region_sf, area_crs)
+  extract_area <- sf::st_transform(extract_zone, area_crs)
+
+  region_geom <- sf::st_make_valid(sf::st_union(sf::st_geometry(region_area)))
+  extract_geom <- sf::st_make_valid(sf::st_union(sf::st_geometry(extract_area)))
+  intersection <- suppressWarnings(sf::st_intersection(region_geom, extract_geom))
+
+  total_area <- sum(as.numeric(sf::st_area(region_geom)))
+  covered_area <- if (length(intersection) == 0 || all(sf::st_is_empty(intersection))) {
+    0
+  } else {
+    sum(as.numeric(sf::st_area(intersection)))
+  }
+  coverage_ratio <- covered_area / total_area
+
+  if (is.na(coverage_ratio) || coverage_ratio < min_coverage) {
+    msg <- sprintf(
+      paste0(
+        "Matched OSM extract %s covers %.1f%% of the requested region, ",
+        "below min_coverage = %.1f%%. Pass a larger match_place, lower ",
+        "match_level, or set coverage_check = \"none\" if partial coverage is intentional."
+      ),
+      match_info$url,
+      100 * coverage_ratio,
+      100 * min_coverage
+    )
+    if (identical(coverage_check, "error")) {
+      stop(msg, call. = FALSE)
+    }
+    warning(msg, call. = FALSE)
+    return(invisible(FALSE))
+  }
+
+  invisible(TRUE)
+}
+
+
 #' Get OpenStreetMap Features by Feature Class
 #'
 #' @description
@@ -588,11 +695,22 @@ osm_region_match_point <- function(region_sf) {
 #' @param provider Character. OSM data provider. Default is "geofabrik".
 #' @param match_level Integer provider matching level passed to
 #'   \code{osmextract::oe_match()} and \code{osmextract::oe_get()}.
+#' @param match_place Optional length-one character place name passed to
+#'   \code{osmextract::oe_match()} and \code{osmextract::oe_get()}. When
+#'   \code{NULL}, the provider extract is matched using a point inside
+#'   \code{region_sf}. Supplying a country or region name is safer for
+#'   national or large-area workflows.
 #' @param max_download_size_mb Maximum matched extract size in MB. Set to
 #'   \code{NA} to disable the check.
 #' @param layers Character vector of osmextract layers to query.
 #' @param as_sf Logical. If TRUE, return sf objects. If FALSE, geometries are
 #'   dropped from returned layers.
+#' @param coverage_check Character. Whether to \code{"error"}, \code{"warn"},
+#'   or do \code{"none"} when the matched provider extract covers less than
+#'   \code{min_coverage} of \code{region_sf}.
+#' @param min_coverage Minimum fraction of \code{region_sf} that must be
+#'   covered by the matched provider extract when \code{coverage_check} is not
+#'   \code{"none"}.
 #' @param verbose Logical. If TRUE, prints progress messages.
 #'
 #' @return A named list by feature class. Each feature class contains
@@ -614,12 +732,16 @@ get_osm_feature_class <- function(
   cache_dir = NULL,
   provider = "geofabrik",
   match_level = 2,
+  match_place = NULL,
   max_download_size_mb = 1500,
   layers = c("points", "lines", "multipolygons"),
   as_sf = TRUE,
+  coverage_check = c("error", "warn", "none"),
+  min_coverage = 0.98,
   verbose = FALSE
 ) {
   stopifnot(inherits(region_sf, "sf"))
+  coverage_check <- match.arg(coverage_check)
 
   if (missing(feature_classes) || length(feature_classes) == 0) {
     stop("feature_classes must contain at least one OSM feature class.", call. = FALSE)
@@ -651,6 +773,7 @@ get_osm_feature_class <- function(
       region_sf = region_sf,
       provider = provider,
       match_level = match_level,
+      match_place = match_place,
       layers = layers,
       tag_sets = combined_tag_sets,
       cache_dir = cache_dir
@@ -677,8 +800,11 @@ get_osm_feature_class <- function(
         verbose = verbose,
         provider = provider,
         match_level = match_level,
+        match_place = match_place,
         max_download_size_mb = max_download_size_mb,
         layers = layers,
+        coverage_check = coverage_check,
+        min_coverage = min_coverage,
         cache_dir = cache_dir
       )
     }
@@ -735,6 +861,22 @@ get_osm_feature_class <- function(
 #' @param verbose Logical. If TRUE, prints detailed progress messages. Default is FALSE.
 #' @param provider Character. OSM data provider. Options: "geofabrik" (default),
 #'   "bbbike", "openstreetmap_fr". See \code{osmextract::oe_providers()}.
+#' @param match_level Integer provider matching level passed to
+#'   \code{osmextract::oe_match()} and \code{osmextract::oe_get()}.
+#' @param match_place Optional length-one character place name passed to
+#'   \code{osmextract::oe_match()} and \code{osmextract::oe_get()}. When
+#'   \code{NULL}, the provider extract is matched using a point inside
+#'   \code{region_sf}. Supplying a country or region name is safer for
+#'   national or large-area workflows.
+#' @param max_download_size_mb Maximum matched extract size in MB. Set to
+#'   \code{NA} to disable the check.
+#' @param layers Character vector of osmextract layers to query.
+#' @param coverage_check Character. Whether to \code{"error"}, \code{"warn"},
+#'   or do \code{"none"} when the matched provider extract covers less than
+#'   \code{min_coverage} of \code{region_sf}.
+#' @param min_coverage Minimum fraction of \code{region_sf} that must be
+#'   covered by the matched provider extract when \code{coverage_check} is not
+#'   \code{"none"}.
 #' @param cache_dir Optional directory used for osmextract downloads and
 #'   converted files.
 #'
@@ -803,11 +945,15 @@ get_osm_features <- function(
   verbose = FALSE,
   provider = "geofabrik",
   match_level = 2, # 2 ~ countries for geofabrik
+  match_place = NULL,
   max_download_size_mb = 1500, # set to NA to disable the check
   layers = c("points", "lines", "multipolygons"), # which layers to query
+  coverage_check = c("error", "warn", "none"),
+  min_coverage = 0.98,
   cache_dir = NULL
 ) {
   stopifnot(inherits(region_sf, "sf"))
+  coverage_check <- match.arg(coverage_check)
 
   # ---- Work in EPSG:4326 for osmextract ----
   region_sf <- prepare_osm_region_boundary(region_sf)
@@ -831,15 +977,23 @@ get_osm_features <- function(
     ))
   }
 
-  # ---- Use a point inside the region just for matching the provider zone ----
-  match_geom <- osm_region_match_point(region_sf)
+  # ---- Match the provider zone; explicit place names are safer for countries ----
+  match_input <- osm_match_input(region_sf, match_place = match_place)
 
   # Pre-check which extract will be used and how big it is
   match_info <- osmextract::oe_match(
-    place = match_geom,
+    place = match_input,
     provider = provider,
     level = match_level,
     quiet = !verbose
+  )
+
+  validate_osm_extract_coverage(
+    region_sf = region_sf,
+    match_info = match_info,
+    provider = provider,
+    coverage_check = coverage_check,
+    min_coverage = min_coverage
   )
 
   size_mb <- as.numeric(match_info$file_size) / 1024^2
@@ -911,7 +1065,7 @@ Refusing to download. Try:
         )
 
         result <- osmextract::oe_get(
-          place = match_geom, # **point used for matching**
+          place = match_input,
           provider = provider,
           layer = layer_name,
           query = sql_query, # SQL runs at st_read() stage
