@@ -148,6 +148,76 @@
   tibble::as_tibble(response$data)
 }
 
+.latest_faostat_release <- function(
+  database,
+  verbose = FALSE,
+  max_retries = 3
+) {
+  releases <- .faostat_data_frame(.faostat_api_get(
+    paste0("codes/releases/", database, "/"),
+    query = list(show_lists = "false"),
+    verbose = verbose,
+    max_retries = max_retries
+  ))
+
+  if (nrow(releases) == 0 || !"code" %in% names(releases)) {
+    stop(
+      "FAOSTAT returned no release metadata for database ",
+      database,
+      ".",
+      call. = FALSE
+    )
+  }
+
+  codes <- trimws(as.character(releases$code))
+  labels <- if ("label" %in% names(releases)) {
+    as.character(releases$label)
+  } else {
+    rep("", length(codes))
+  }
+  valid <- !is.na(codes) & nzchar(codes)
+  codes <- codes[valid]
+  labels <- labels[valid]
+
+  if (length(codes) == 0) {
+    stop(
+      "FAOSTAT returned no valid release codes for database ",
+      database,
+      ".",
+      call. = FALSE
+    )
+  }
+
+  release_text <- paste(codes, labels)
+  year_match <- regexpr("(19|20)[0-9]{2}", release_text, perl = TRUE)
+  years <- rep(NA_integer_, length(codes))
+  has_year <- year_match > 0
+  years[has_year] <- as.integer(regmatches(release_text, year_match))
+
+  if (length(codes) > 1 && all(is.na(years))) {
+    stop(
+      "Could not determine the latest FAOSTAT release for database ",
+      database,
+      ".",
+      call. = FALSE
+    )
+  }
+
+  if (length(codes) == 1) {
+    return(codes[[1]])
+  }
+
+  candidates <- which(!is.na(years))
+  sequence_number <- suppressWarnings(as.integer(sub("S.*$", "", codes)))
+  sequence_number[is.na(sequence_number)] <- -Inf
+  ranked <- order(
+    years[candidates],
+    sequence_number[candidates],
+    codes[candidates]
+  )
+  codes[candidates[ranked[[length(ranked)]]]]
+}
+
 .clean_faostat_aggregate_label <- function(label) {
   label <- sub(" \\+ \\(Total\\)$", "", label)
   label <- sub(" > \\(List\\)$", "", label)
@@ -352,8 +422,11 @@ list_faostat_metadata <- function(
 #'   common names to item codes. Default is TRUE.
 #' @param mrv Integer. Most Recent Values - number of years to retrieve. Default is 50.
 #' @param iso3 Character. ISO3 country code to filter data. Default is NULL (all countries).
-#' @param release Character. Release version for CAHD database (e.g., "7S2025" for July 2025).
-#'   Default is NULL (auto-set to "7S2025" for CAHD).
+#' @param release Character. Optional release version for the CAHD database
+#'   (for example, "7S2026" for July 2026). When NULL, the latest release is
+#'   discovered from live FAOSTAT metadata. If metadata discovery is
+#'   unavailable, the release filter is omitted so FAOSTAT uses its current
+#'   default release.
 #' @param verbose Logical. If TRUE, prints detailed progress messages. Default is FALSE.
 #' @param max_retries Integer. Maximum number of retry attempts for failed requests.
 #'   Default is 3.
@@ -409,7 +482,8 @@ list_faostat_metadata <- function(
 #'   \item Lookup tables are limited to common agricultural items
 #'   \item For other databases/elements, use \code{use_lookup = FALSE} and provide exact codes
 #'   \item FS database uses 3-year averages (e.g., 2000 represents 2000-2002)
-#'   \item CAHD database requires release parameter (auto-set to "7S2025" if not specified)
+#'   \item CAHD requests use the latest release reported by FAOSTAT unless an
+#'   explicit release is supplied
 #' }
 #'
 #' **Discovering Available Data:**
@@ -570,11 +644,31 @@ get_faostat_data <- function(
     item_cs <- "FBS"
   }
 
-  # Auto-set release for CAHD database if not specified.
+  # Resolve the current CAHD release unless the caller explicitly pins one.
   if (is.null(release) && !is.null(database) && toupper(database) == "CAHD") {
-    release <- "7S2025"
+    release <- tryCatch(
+      .latest_faostat_release(
+        database = database,
+        verbose = verbose,
+        max_retries = max_retries
+      ),
+      error = function(e) {
+        if (verbose) {
+          message(
+            "Could not discover the latest CAHD release; using the ",
+            "FAOSTAT API default. ",
+            conditionMessage(e)
+          )
+        }
+        NULL
+      }
+    )
     if (verbose) {
-      message(sprintf("Using CAHD release: %s", release))
+      if (is.null(release)) {
+        message("Using the FAOSTAT API default CAHD release")
+      } else {
+        message(sprintf("Using latest CAHD release: %s", release))
+      }
     }
   }
 

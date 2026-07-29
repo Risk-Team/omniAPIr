@@ -36,8 +36,11 @@ common names to item codes. Default is TRUE.}
 
 \item{iso3}{Character. ISO3 country code to filter data. Default is NULL (all countries).}
 
-\item{release}{Character. Release version for CAHD database (e.g., "7S2025" for July 2025).
-Default is NULL (auto-set to "7S2025" for CAHD).}
+\item{release}{Character. Optional release version for the CAHD database
+(for example, "7S2026" for July 2026). When NULL, the latest release is
+discovered from live FAOSTAT metadata. If metadata discovery is
+unavailable, the release filter is omitted so FAOSTAT uses its current
+default release.}
 
 \item{verbose}{Logical. If TRUE, prints detailed progress messages. Default is FALSE.}
 
@@ -104,7 +107,8 @@ It currently works with a limited set of FAOSTAT databases and elements.
   \item Lookup tables are limited to common agricultural items
   \item For other databases/elements, use \code{use_lookup = FALSE} and provide exact codes
   \item FS database uses 3-year averages (e.g., 2000 represents 2000-2002)
-  \item CAHD database requires release parameter (auto-set to "7S2025" if not specified)
+  \item CAHD requests use the latest release reported by FAOSTAT unless an
+  explicit release is supplied
 }
 
 **Discovering Available Data:**
