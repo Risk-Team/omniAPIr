@@ -89,6 +89,15 @@ download_and_process_ee_image <- function(
         )
     }
 
+    # geedim reopens downloads for writing; GDAL's LIBERTIFF driver is read-only.
+    gdal_skip <- Sys.getenv("GDAL_SKIP")
+    if (!grepl("(^|,)\\s*LIBERTIFF\\s*(,|$)", gdal_skip)) {
+        Sys.setenv(GDAL_SKIP = paste(
+            c(gdal_skip[nzchar(gdal_skip)], "LIBERTIFF"),
+            collapse = ","
+        ))
+    }
+
     # Set up reticulate with conda environment
     reticulate::use_condaenv(conda_env, required = TRUE)
 
