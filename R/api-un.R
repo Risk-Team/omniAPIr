@@ -1341,8 +1341,63 @@ get_undp_data <- function(
   max_retries = 3,
   exclude_aggregates = TRUE
 ) {
-  # Always use the detailed endpoint
+  # The API remains the preferred source, but UNDP has periodically retired
+  # endpoint versions while continuing to publish the same data as an official
+  # wide CSV. Keep that download as a schema-compatible fallback.
   base_url <- "https://hdrdata.org/api/CompositeIndices/query-detailed"
+  download_url <- paste0(
+    "https://hdr.undp.org/sites/default/files/2025_HDR/",
+    "HDR25_Composite_indices_complete_time_series.csv"
+  )
+
+  fetch_download <- function(years_to_keep = NULL) {
+    downloaded <- readr::read_csv(
+      download_url,
+      show_col_types = FALSE,
+      progress = FALSE,
+      na = c("", "..")
+    )
+
+    indicator_prefix <- paste0(tolower(indicator), "_")
+    value_cols <- names(downloaded)[
+      startsWith(tolower(names(downloaded)), indicator_prefix) &
+        grepl("_[0-9]{4}$", names(downloaded))
+    ]
+
+    if (!length(value_cols)) {
+      stop(
+        sprintf("Indicator '%s' was not found in the UNDP download.", indicator),
+        call. = FALSE
+      )
+    }
+
+    result <- downloaded |>
+      dplyr::select(dplyr::any_of(c("iso3", "country")), dplyr::all_of(value_cols)) |>
+      tidyr::pivot_longer(
+        cols = dplyr::all_of(value_cols),
+        names_to = "indicator_year",
+        values_to = "value"
+      ) |>
+      dplyr::transmute(
+        countryIsoCode = iso3,
+        country = country,
+        year = as.integer(sub(".*_", "", indicator_year)),
+        value = as.numeric(value)
+      ) |>
+      dplyr::filter(!is.na(value))
+
+    if (!is.null(iso3) && length(iso3)) {
+      result <- result |>
+        dplyr::filter(countryIsoCode %in% unique(iso3))
+    }
+    if (!is.null(years_to_keep) && length(years_to_keep)) {
+      result <- result |>
+        dplyr::filter(year %in% as.integer(years_to_keep))
+    }
+
+    attr(result, "undp_source") <- "official_download"
+    result
+  }
 
   if (metadata) {
     resp <- httr2::request(base_url) |>
@@ -1394,6 +1449,13 @@ get_undp_data <- function(
           success <- TRUE
         },
         error = function(e) {
+          is_not_found <- inherits(e, "httr2_http_404") ||
+            grepl("HTTP 404", conditionMessage(e), fixed = TRUE)
+
+          if (is_not_found) {
+            stop(e)
+          }
+
           if (retry_attempt < max_retries) {
             wait_time <- 2^retry_attempt
             if (verbose) {
@@ -1435,7 +1497,28 @@ get_undp_data <- function(
   }
 
   # Try fetching data with the requested years first
-  result <- try_fetch_undp_data(years)
+  result <- tryCatch(
+    try_fetch_undp_data(years),
+    error = function(e) {
+      if (verbose) {
+        message(
+          "UNDP API unavailable; using the official composite-indices download."
+        )
+      }
+      fetch_download(years)
+    }
+  )
+
+  # An empty result from the published download is authoritative. Do not turn
+  # legitimate country/indicator gaps into more calls to the retired endpoint.
+  if (nrow(result) == 0 &&
+      identical(attr(result, "undp_source"), "official_download")) {
+    if (verbose) {
+      message("No matching UNDP observations found in the official download.")
+    }
+    return(result)
+  }
+
   # If no data returned, implement smart year discovery
   if (nrow(result) == 0) {
     if (verbose) {
