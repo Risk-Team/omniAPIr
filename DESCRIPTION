@@ -1,7 +1,7 @@
 Package: omniAPIr
 Type: Package
 Title: Unified Interface to Multiple International Data APIs
-Version: 0.6.0
+Version: 0.7.0
 Authors@R: c(
     person(
       "Riccardo", "Soldan",

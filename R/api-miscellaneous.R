@@ -522,7 +522,7 @@ osm_cache_file <- function(region_sf, provider, match_level, layers, tag_sets,
                            cache_dir, match_place = NULL) {
   region_4326 <- sf::st_transform(region_sf, 4326)
   cache_key <- rlang::hash(list(
-    osm_feature_cache_version = 3L,
+    osm_feature_cache_version = 4L,
     region_geometry = sf::st_as_binary(sf::st_geometry(region_4326)),
     provider = provider,
     match_level = match_level,
@@ -815,8 +815,14 @@ get_osm_feature_class <- function(
       suppressMessages(fetch_features())
     }
 
-    if (!is.null(cache_file)) {
+    failed_layers <- attr(combined_features, "osm_failed_layers", exact = TRUE)
+    if (!is.null(cache_file) && length(failed_layers) == 0L) {
       saveRDS(combined_features, cache_file)
+    } else if (!is.null(cache_file) && verbose) {
+      message(
+        "Not caching OSM results because these layers failed: ",
+        paste(failed_layers, collapse = ", ")
+      )
     }
   }
 
@@ -1095,12 +1101,12 @@ Refusing to download. Try:
               layer_name
             ))
           }
-          result
+          list(data = result, error = NULL)
         } else {
           if (verbose) {
             message(sprintf("  No features found in %s", layer_name))
           }
-          empty_osm_sf()
+          list(data = empty_osm_sf(), error = NULL)
         }
       },
       error = function(e) {
@@ -1109,46 +1115,66 @@ Refusing to download. Try:
           layer_name,
           conditionMessage(e)
         )
-        if (verbose) {
-          message("  ", error_message)
-        } else {
-          warning(error_message, call. = FALSE)
-        }
-        empty_osm_sf()
+        warning(error_message, call. = FALSE)
+        list(data = empty_osm_sf(), error = conditionMessage(e))
       }
     )
   }
 
   # ---- Query only requested layers ----
-  pts <- if ("points" %in% layers) {
+  pts_result <- if ("points" %in% layers) {
     query_layer("points", extra_tags, verbose)
   } else {
-    empty_osm_sf()
+    list(data = empty_osm_sf(), error = NULL)
   }
 
-  lines <- if ("lines" %in% layers) {
+  lines_result <- if ("lines" %in% layers) {
     query_layer("lines", extra_tags, verbose)
   } else {
-    empty_osm_sf()
+    list(data = empty_osm_sf(), error = NULL)
   }
 
-  poly <- if ("multipolygons" %in% layers) {
+  poly_result <- if ("multipolygons" %in% layers) {
     query_layer("multipolygons", extra_tags, verbose)
   } else {
-    empty_osm_sf()
+    list(data = empty_osm_sf(), error = NULL)
   }
 
+  pts <- pts_result$data
+  lines <- lines_result$data
+  poly <- poly_result$data
   multipoly <- empty_osm_sf() # placeholder, as in your original function
+
+  query_errors <- Filter(
+    Negate(is.null),
+    list(
+      points = if ("points" %in% layers) pts_result$error else NULL,
+      lines = if ("lines" %in% layers) lines_result$error else NULL,
+      multipolygons = if ("multipolygons" %in% layers) poly_result$error else NULL
+    )
+  )
+  failed_layers <- names(query_errors)
 
   total_features <- nrow(pts) + nrow(lines) + nrow(poly) + nrow(multipoly)
   if (verbose) {
-    message(sprintf(
-      "✓ OSM data retrieved successfully: %d total features",
-      total_features
-    ))
+    if (length(failed_layers) == 0L) {
+      message(sprintf(
+        "✓ OSM data retrieved successfully: %d total features",
+        total_features
+      ))
+    } else {
+      message(sprintf(
+        "OSM query completed with %d failed layer(s) (%s); returning empty data for failed layers",
+        length(failed_layers),
+        paste(failed_layers, collapse = ", ")
+      ))
+    }
   }
 
-  list(pts = pts, lines = lines, poly = poly, multipoly = multipoly)
+  result <- list(pts = pts, lines = lines, poly = poly, multipoly = multipoly)
+  attr(result, "osm_failed_layers") <- failed_layers
+  attr(result, "osm_query_errors") <- query_errors
+  result
 }
 
 

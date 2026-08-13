@@ -275,6 +275,70 @@ test_that("OSM feature class API splits one combined query by class", {
     expect_equal(result$schools$pts$feature_label, "Schools")
 })
 
+test_that("OSM feature class API does not cache failed layer queries", {
+    region <- sf::st_sf(
+        id = 1,
+        geometry = sf::st_sfc(sf::st_point(c(36.8, -1.3)), crs = 4326)
+    )
+    cache_dir <- tempfile("osm-cache-")
+    dir.create(cache_dir)
+    on.exit(unlink(cache_dir, recursive = TRUE), add = TRUE)
+    query_count <- 0
+
+    local_mocked_bindings(
+        get_osm_features = function(region_sf, tag_sets, ...) {
+            query_count <<- query_count + 1
+            result <- list(
+                pts = omniAPIr:::empty_osm_sf(),
+                lines = omniAPIr:::empty_osm_sf(),
+                poly = omniAPIr:::empty_osm_sf(),
+                multipoly = omniAPIr:::empty_osm_sf()
+            )
+            attr(result, "osm_failed_layers") <- "points"
+            attr(result, "osm_query_errors") <- list(points = "test failure")
+            result
+        }
+    )
+
+    get_osm_feature_class(region, "schools", cache_dir = cache_dir, layers = "points")
+    get_osm_feature_class(region, "schools", cache_dir = cache_dir, layers = "points")
+
+    expect_equal(query_count, 2)
+    expect_length(list.files(cache_dir, pattern = "[.]rds$"), 0)
+})
+
+test_that("OSM feature class API caches successful empty queries", {
+    region <- sf::st_sf(
+        id = 1,
+        geometry = sf::st_sfc(sf::st_point(c(36.8, -1.3)), crs = 4326)
+    )
+    cache_dir <- tempfile("osm-cache-")
+    dir.create(cache_dir)
+    on.exit(unlink(cache_dir, recursive = TRUE), add = TRUE)
+    query_count <- 0
+
+    local_mocked_bindings(
+        get_osm_features = function(region_sf, tag_sets, ...) {
+            query_count <<- query_count + 1
+            result <- list(
+                pts = omniAPIr:::empty_osm_sf(),
+                lines = omniAPIr:::empty_osm_sf(),
+                poly = omniAPIr:::empty_osm_sf(),
+                multipoly = omniAPIr:::empty_osm_sf()
+            )
+            attr(result, "osm_failed_layers") <- character()
+            attr(result, "osm_query_errors") <- list()
+            result
+        }
+    )
+
+    get_osm_feature_class(region, "schools", cache_dir = cache_dir, layers = "points")
+    get_osm_feature_class(region, "schools", cache_dir = cache_dir, layers = "points")
+
+    expect_equal(query_count, 1)
+    expect_length(list.files(cache_dir, pattern = "[.]rds$"), 1)
+})
+
 test_that("OSM API metadata points users to feature classes and osmextract", {
     info <- get_api_info("OpenStreetMap")
 
