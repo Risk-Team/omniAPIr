@@ -387,6 +387,8 @@ get_ibat_data <- function(
 #' @param verbose Logical. If TRUE, prints detailed progress messages. Default is FALSE.
 #' @param max_retries Integer. Maximum number of retry attempts for failed requests.
 #'   Default is 3.
+#' @param timeout_s Numeric. Per-request timeout in seconds for GBIF occurrence
+#'   searches. Default is 30.
 #'
 #' @return A data.frame or sf object (if geolocation=TRUE) containing invasive
 #'   species data with taxonomy and occurrence information.
@@ -422,7 +424,8 @@ get_invasive_alien_species <- function(
   output_filename,
   geolocation = FALSE,
   verbose = FALSE,
-  max_retries = 3
+  max_retries = 3,
+  timeout_s = 30
 ) {
   stopifnot(is.character(iso3), length(iso3) == 1)
 
@@ -663,7 +666,8 @@ get_invasive_alien_species <- function(
               scientificName = k,
               country = iso2,
               hasCoordinate = TRUE,
-              limit = limit_per_species
+              limit = limit_per_species,
+              curlopts = list(http_version = 2, timeout = timeout_s)
             )
             success <- TRUE
           },

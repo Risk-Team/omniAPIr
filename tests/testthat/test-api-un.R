@@ -124,6 +124,82 @@ test_that("get_who_data errors after exhausted API retries", {
     )
 })
 
+test_that("get_unsdg_data applies per-attempt timeout", {
+    skip_if_not_installed("httr2")
+
+    seen_timeout_ms <- NULL
+    local_mocked_bindings(
+        req_perform = function(req, ...) {
+            seen_timeout_ms <<- req$options$timeout_ms
+            stop("simulated UNSDG network failure", call. = FALSE)
+        },
+        .package = "httr2"
+    )
+
+    expect_error(
+        get_unsdg_data(
+            indicators = "SI_POV_DAY1",
+            mrv = 1,
+            verbose = FALSE,
+            max_retries = 1,
+            timeout_s = 7
+        ),
+        "Failed to fetch UNSDG data"
+    )
+    expect_equal(seen_timeout_ms, 7000)
+})
+
+test_that("get_who_data applies per-attempt timeout", {
+    skip_if_not_installed("httr2")
+
+    seen_timeout_ms <- NULL
+    local_mocked_bindings(
+        req_perform = function(req, ...) {
+            seen_timeout_ms <<- req$options$timeout_ms
+            stop("simulated WHO network failure", call. = FALSE)
+        },
+        .package = "httr2"
+    )
+
+    expect_error(
+        get_who_data(
+            indicators = "WHOSIS_000001",
+            mrv = 1,
+            verbose = FALSE,
+            max_retries = 1,
+            timeout_s = 9
+        ),
+        "Failed to fetch WHO data"
+    )
+    expect_equal(seen_timeout_ms, 9000)
+})
+
+test_that("get_ilo_data applies per-attempt timeout", {
+    skip_if_not_installed("httr2")
+
+    seen_timeout_ms <- NULL
+    local_mocked_bindings(
+        req_perform = function(req, ...) {
+            seen_timeout_ms <<- req$options$timeout_ms
+            stop("simulated ILO network failure", call. = FALSE)
+        },
+        .package = "httr2"
+    )
+
+    expect_error(
+        get_ilo_data(
+            iso3 = "KEN",
+            indicators = "UNE_DEAP_SEX_AGE_RT_A",
+            mrv = 1,
+            verbose = FALSE,
+            max_retries = 1,
+            timeout_s = 11
+        ),
+        "Failed to fetch ILO data"
+    )
+    expect_equal(seen_timeout_ms, 11000)
+})
+
 test_that("get_ilo_data normalizes Year and Value types", {
     skip_if_not_installed("httr2")
 

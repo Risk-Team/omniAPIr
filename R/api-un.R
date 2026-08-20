@@ -944,6 +944,7 @@ get_wb_data <- function(
 #' @param verbose Logical. If TRUE, prints detailed progress messages. Default is FALSE.
 #' @param max_retries Integer. Maximum number of retry attempts for failed requests.
 #'   Default is 3.
+#' @param timeout_s Numeric. Per-request timeout in seconds. Default is 30.
 #' @param exclude_aggregates Logical. If TRUE (default), filters out regional and income group aggregates,
 #'   returning only data for individual countries with valid ISO3 codes.
 #'
@@ -993,6 +994,7 @@ get_unsdg_data <- function(
   mrv = 23,
   verbose = FALSE,
   max_retries = 3,
+  timeout_s = 30,
   exclude_aggregates = TRUE
 ) {
   if (verbose) {
@@ -1070,6 +1072,7 @@ get_unsdg_data <- function(
           {
             resp <- httr2::request(base) |>
               httr2::req_url_query(!!!q) |>
+              httr2::req_timeout(timeout_s) |>
               httr2::req_perform()
             if (!httr2::resp_is_error(resp)) {
               success <- TRUE
@@ -1983,6 +1986,7 @@ get_ilo_data <- function(
 #' @param verbose Logical. If TRUE, prints URLs and a final row count.
 #' @param max_retries Integer. Maximum number of retry attempts for failed
 #'   requests. Default is 3.
+#' @param timeout_s Numeric. Per-request timeout in seconds. Default is 30.
 #'
 #' @return A tibble with all original WHO fields plus:
 #'   - `indicator`
@@ -1996,7 +2000,8 @@ get_who_data <- function(
   mrv = 10,
   exclude_aggregates = TRUE,
   verbose = FALSE,
-  max_retries = 3
+  max_retries = 3,
+  timeout_s = 30
 ) {
   if (missing(indicators) || length(indicators) == 0) {
     stop("`indicators` must be a non-empty character vector.")
@@ -2029,6 +2034,7 @@ get_who_data <- function(
       resp <- tryCatch(
         {
           httr2::request(url) |>
+            httr2::req_timeout(timeout_s) |>
             httr2::req_perform() |>
             httr2::resp_body_json()
         },
