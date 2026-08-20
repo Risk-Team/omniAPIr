@@ -682,14 +682,15 @@ get_invasive_alien_species <- function(
               Sys.sleep(wait_time)
               retry_attempt <<- retry_attempt + 1
             } else {
-              if (verbose) {
-                message(sprintf(
-                  "    Failed to fetch occurrences for '%s' after %d attempts. Skipping.",
+              stop(
+                sprintf(
+                  "Failed to fetch occurrences for '%s' after %d attempts: %s",
                   k,
-                  max_retries
-                ))
-              }
-              retry_attempt <<- retry_attempt + 1 # Exit loop
+                  max_retries,
+                  conditionMessage(e)
+                ),
+                call. = FALSE
+              )
             }
           }
         )

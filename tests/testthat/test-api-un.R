@@ -49,22 +49,79 @@ test_that("get_ilo_data works with basic parameters", {
     }
 })
 
-test_that("get_ilo_data returns on invalid indicators", {
+test_that("get_ilo_data errors on invalid indicators", {
     skip_if_not_installed("httr2")
 
-    start_time <- Sys.time()
-    result <- get_ilo_data(
-        iso3 = "KEN",
-        indicators = "NOT_A_REAL_ILO_INDICATOR",
-        mrv = 3,
-        verbose = FALSE,
-        max_retries = 1,
-        timeout_s = 5
+    expect_error(
+        get_ilo_data(
+            iso3 = "KEN",
+            indicators = "NOT_A_REAL_ILO_INDICATOR",
+            mrv = 3,
+            verbose = FALSE,
+            max_retries = 1,
+            timeout_s = 5
+        ),
+        "Failed to fetch ILO data"
     )
-    elapsed <- as.numeric(difftime(Sys.time(), start_time, units = "secs"))
+})
 
-    expect_s3_class(result, "data.frame")
-    expect_lt(elapsed, 15)
+test_that("get_unsdg_data errors after exhausted API retries", {
+    skip_if_not_installed("httr2")
+
+    local_mocked_bindings(
+        req_perform = function(...) stop("simulated UNSDG network failure", call. = FALSE),
+        .package = "httr2"
+    )
+
+    expect_error(
+        get_unsdg_data(
+            indicators = "SI_POV_DAY1",
+            mrv = 1,
+            verbose = FALSE,
+            max_retries = 1
+        ),
+        "Failed to fetch UNSDG data"
+    )
+})
+
+test_that("get_ilo_data errors after exhausted API retries", {
+    skip_if_not_installed("httr2")
+
+    local_mocked_bindings(
+        req_perform = function(...) stop("simulated ILO network failure", call. = FALSE),
+        .package = "httr2"
+    )
+
+    expect_error(
+        get_ilo_data(
+            iso3 = "KEN",
+            indicators = "UNE_DEAP_SEX_AGE_RT_A",
+            mrv = 1,
+            verbose = FALSE,
+            max_retries = 1,
+            timeout_s = 1
+        ),
+        "Failed to fetch ILO data"
+    )
+})
+
+test_that("get_who_data errors after exhausted API retries", {
+    skip_if_not_installed("httr2")
+
+    local_mocked_bindings(
+        req_perform = function(...) stop("simulated WHO network failure", call. = FALSE),
+        .package = "httr2"
+    )
+
+    expect_error(
+        get_who_data(
+            indicators = "WHOSIS_000001",
+            mrv = 1,
+            verbose = FALSE,
+            max_retries = 1
+        ),
+        "Failed to fetch WHO data"
+    )
 })
 
 test_that("get_ilo_data normalizes Year and Value types", {

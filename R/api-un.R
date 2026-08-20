@@ -1092,21 +1092,33 @@ get_unsdg_data <- function(
               Sys.sleep(wait_time)
               retry_attempt <<- retry_attempt + 1
             } else {
-              message(sprintf(
-                "Request failed for indicator=%s area=%s page=%d after %d attempts",
-                ind,
-                ifelse(is.null(area), "ALL", area),
-                page,
-                max_retries
-              ))
-              retry_attempt <<- retry_attempt + 1 # Exit loop
+              stop(
+                sprintf(
+                  "Failed to fetch UNSDG data for indicator=%s area=%s page=%d after %d attempts: %s",
+                  ind,
+                  ifelse(is.null(area), "ALL", area),
+                  page,
+                  max_retries,
+                  conditionMessage(e)
+                ),
+                call. = FALSE
+              )
             }
           }
         )
       }
 
       if (!success) {
-        break
+        stop(
+          sprintf(
+            "Failed to fetch UNSDG data for indicator=%s area=%s page=%d after %d attempts",
+            ind,
+            ifelse(is.null(area), "ALL", area),
+            page,
+            max_retries
+          ),
+          call. = FALSE
+        )
       }
 
       # Parse response according to Swagger schema
@@ -1753,13 +1765,15 @@ get_ilo_data <- function(
                 ))
               }
               Sys.sleep(wait_time)
-            } else {
-              warning(sprintf(
-                "Failed to fetch ILO data for indicator %s: %s",
-                id, conditionMessage(e)
-              ))
+              return(NULL)
             }
-            NULL
+            stop(
+              sprintf(
+                "Failed to fetch ILO data for indicator %s after %d attempts: %s",
+                id, max_retries, conditionMessage(e)
+              ),
+              call. = FALSE
+            )
           }
         )
 
@@ -1777,19 +1791,17 @@ get_ilo_data <- function(
               readRDS(tmp)
             },
             error = function(e) {
-              if (verbose) {
-                message(sprintf(
-                  "Failed to parse RDS for %s: %s", id, conditionMessage(e)
-                ))
-              }
-              NULL
+              stop(
+                sprintf(
+                  "Failed to parse ILO RDS for indicator %s: %s",
+                  id, conditionMessage(e)
+                ),
+                call. = FALSE
+              )
             }
           )
-          if (!is.null(df)) {
-            df$indicator <- id
-            return(tibble::as_tibble(df))
-          }
-          return(NULL)
+          df$indicator <- id
+          return(tibble::as_tibble(df))
         }
 
         if (status %in% c(408, 429, 500, 502, 503, 504) && attempt < max_retries) {
@@ -1804,12 +1816,21 @@ get_ilo_data <- function(
           next
         }
 
-        if (verbose) {
-          message(sprintf("HTTP error %d for indicator: %s", status, id))
-        }
-        return(NULL)
+        stop(
+          sprintf(
+            "Failed to fetch ILO data for indicator %s after %d attempts: HTTP %d",
+            id, max_retries, status
+          ),
+          call. = FALSE
+        )
       }
-      NULL
+      stop(
+        sprintf(
+          "Failed to fetch ILO data for indicator %s after %d attempts",
+          id, max_retries
+        ),
+        call. = FALSE
+      )
     }
 
     out <- purrr::map_dfr(indicators, fetch_one)
@@ -1960,6 +1981,8 @@ get_ilo_data <- function(
 #' @param exclude_aggregates Logical. If TRUE (default), drop regional/income
 #'   aggregates using `countrycode` on ISO3 codes.
 #' @param verbose Logical. If TRUE, prints URLs and a final row count.
+#' @param max_retries Integer. Maximum number of retry attempts for failed
+#'   requests. Default is 3.
 #'
 #' @return A tibble with all original WHO fields plus:
 #'   - `indicator`
@@ -1972,7 +1995,8 @@ get_who_data <- function(
   iso3 = NULL,
   mrv = 10,
   exclude_aggregates = TRUE,
-  verbose = FALSE
+  verbose = FALSE,
+  max_retries = 3
 ) {
   if (missing(indicators) || length(indicators) == 0) {
     stop("`indicators` must be a non-empty character vector.")
@@ -1981,7 +2005,7 @@ get_who_data <- function(
   indicators <- unique(indicators)
 
   # ---- internal helper: fetch one indicator ---------------------------------
-  fetch_one_indicator <- function(ind, max_retries = 3) {
+  fetch_one_indicator <- function(ind) {
     base_url <- sprintf("https://ghoapi.azureedge.net/api/%s", ind)
 
     if (!is.null(iso3)) {
@@ -2022,22 +2046,31 @@ get_who_data <- function(
               ))
             }
             Sys.sleep(wait_time)
-          } else {
-            warning(sprintf(
-              "Failed to fetch WHO data for indicator %s: %s",
-              ind,
-              conditionMessage(e)
-            ))
+            return(NULL)
           }
-          NULL
+          stop(
+            sprintf(
+              "Failed to fetch WHO data for indicator %s after %d attempts: %s",
+              ind,
+              max_retries,
+              conditionMessage(e)
+            ),
+            call. = FALSE
+          )
         }
       )
       if (!is.null(resp)) break
     }
 
-    # Return NULL if all retries failed
     if (is.null(resp)) {
-      return(NULL)
+      stop(
+        sprintf(
+          "Failed to fetch WHO data for indicator %s after %d attempts",
+          ind,
+          max_retries
+        ),
+        call. = FALSE
+      )
     }
 
     # WHO returns records under `$value`
