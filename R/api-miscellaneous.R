@@ -522,7 +522,7 @@ osm_cache_file <- function(region_sf, provider, match_level, layers, tag_sets,
                            cache_dir, match_place = NULL) {
   region_4326 <- sf::st_transform(region_sf, 4326)
   cache_key <- rlang::hash(list(
-    osm_feature_cache_version = 4L,
+    osm_feature_cache_version = 5L,
     region_geometry = sf::st_as_binary(sf::st_geometry(region_4326)),
     provider = provider,
     match_level = match_level,
@@ -629,11 +629,12 @@ validate_osm_extract_coverage <- function(region_sf, match_info, provider,
     stop("min_coverage must be a numeric value between 0 and 1.", call. = FALSE)
   }
 
-  extract_zone <- osm_extract_zone(match_info, provider)
-  if (is.null(extract_zone)) {
+  match_infos <- if (!is.null(match_info$url)) list(match_info) else match_info
+  extract_zones <- lapply(match_infos, osm_extract_zone, provider = provider)
+  if (length(extract_zones) == 0L || any(vapply(extract_zones, is.null, logical(1)))) {
     msg <- paste0(
-      "Could not validate OSM extract coverage because the matched extract ",
-      "was not found in the provider zone catalogue."
+      "Could not validate OSM extract coverage because one or more matched ",
+      "extracts were not found in the provider zone catalogue."
     )
     if (identical(coverage_check, "error")) {
       stop(msg, call. = FALSE)
@@ -644,7 +645,7 @@ validate_osm_extract_coverage <- function(region_sf, match_info, provider,
 
   area_crs <- 6933
   region_area <- sf::st_transform(region_sf, area_crs)
-  extract_area <- sf::st_transform(extract_zone, area_crs)
+  extract_area <- sf::st_transform(do.call(rbind, extract_zones), area_crs)
 
   region_geom <- sf::st_make_valid(sf::st_union(sf::st_geometry(region_area)))
   extract_geom <- sf::st_make_valid(sf::st_union(sf::st_geometry(extract_area)))
@@ -661,11 +662,11 @@ validate_osm_extract_coverage <- function(region_sf, match_info, provider,
   if (is.na(coverage_ratio) || coverage_ratio < min_coverage) {
     msg <- sprintf(
       paste0(
-        "Matched OSM extract %s covers %.1f%% of the requested region, ",
+        "Matched OSM extract union %s covers %.1f%% of the requested region, ",
         "below min_coverage = %.1f%%. Pass a larger match_place, lower ",
         "match_level, or set coverage_check = \"none\" if partial coverage is intentional."
       ),
-      match_info$url,
+      paste(vapply(match_infos, function(x) as.character(x$url), ""), collapse = ", "),
       100 * coverage_ratio,
       100 * min_coverage
     )
@@ -695,11 +696,12 @@ validate_osm_extract_coverage <- function(region_sf, match_info, provider,
 #' @param provider Character. OSM data provider. Default is "geofabrik".
 #' @param match_level Integer provider matching level passed to
 #'   \code{osmextract::oe_match()} and \code{osmextract::oe_get()}.
-#' @param match_place Optional length-one character place name passed to
+#' @param match_place Optional character vector of place names passed to
 #'   \code{osmextract::oe_match()} and \code{osmextract::oe_get()}. When
 #'   \code{NULL}, the provider extract is matched using a point inside
-#'   \code{region_sf}. Supplying a country or region name is safer for
-#'   national or large-area workflows.
+#'   \code{region_sf}. Multiple places are queried separately, validated for
+#'   combined coverage, merged, and deduplicated by OSM ID. Supplying country
+#'   or region names is safer for national or large-area workflows.
 #' @param max_download_size_mb Maximum matched extract size in MB. Set to
 #'   \code{NA} to disable the check.
 #' @param layers Character vector of osmextract layers to query.
@@ -869,13 +871,14 @@ get_osm_feature_class <- function(
 #'   "bbbike", "openstreetmap_fr". See \code{osmextract::oe_providers()}.
 #' @param match_level Integer provider matching level passed to
 #'   \code{osmextract::oe_match()} and \code{osmextract::oe_get()}.
-#' @param match_place Optional length-one character place name passed to
+#' @param match_place Optional character vector of place names passed to
 #'   \code{osmextract::oe_match()} and \code{osmextract::oe_get()}. When
 #'   \code{NULL}, the provider extract is matched using a point inside
-#'   \code{region_sf}. Supplying a country or region name is safer for
-#'   national or large-area workflows.
-#' @param max_download_size_mb Maximum matched extract size in MB. Set to
-#'   \code{NA} to disable the check.
+#'   \code{region_sf}. Multiple places are queried separately, validated for
+#'   combined coverage, merged, and deduplicated by OSM ID. Supplying country
+#'   or region names is safer for national or large-area workflows.
+#' @param max_download_size_mb Maximum combined matched-extract size in MB.
+#'   Set to \code{NA} to disable the check.
 #' @param layers Character vector of osmextract layers to query.
 #' @param coverage_check Character. Whether to \code{"error"}, \code{"warn"},
 #'   or do \code{"none"} when the matched provider extract covers less than
@@ -983,33 +986,49 @@ get_osm_features <- function(
     ))
   }
 
-  # ---- Match the provider zone; explicit place names are safer for countries ----
-  match_input <- osm_match_input(region_sf, match_place = match_place)
+  # ---- Match provider zones; explicit place names are safer for countries ----
+  match_inputs <- if (is.null(match_place)) {
+    list(osm_match_input(region_sf))
+  } else {
+    match_place <- unique(as.character(match_place))
+    lapply(match_place, function(place) osm_match_input(region_sf, place))
+  }
 
-  # Pre-check which extract will be used and how big it is
-  match_info <- osmextract::oe_match(
-    place = match_input,
-    provider = provider,
-    level = match_level,
-    quiet = !verbose
-  )
+  # Pre-check which extracts will be used and their combined size.
+  match_infos <- lapply(match_inputs, function(match_input) {
+    osmextract::oe_match(
+      place = match_input,
+      provider = provider,
+      level = match_level,
+      quiet = !verbose
+    )
+  })
+  matched_urls <- vapply(match_infos, function(x) as.character(x$url), "")
+  keep_extract <- !duplicated(matched_urls)
+  match_inputs <- match_inputs[keep_extract]
+  match_infos <- match_infos[keep_extract]
 
   validate_osm_extract_coverage(
     region_sf = region_sf,
-    match_info = match_info,
+    match_info = match_infos,
     provider = provider,
     coverage_check = coverage_check,
     min_coverage = min_coverage
   )
 
-  size_mb <- as.numeric(match_info$file_size) / 1024^2
+  sizes_mb <- vapply(match_infos, function(x) {
+    as.numeric(x$file_size) / 1024^2
+  }, numeric(1))
+  size_mb <- sum(sizes_mb)
 
   if (verbose) {
-    message(sprintf(
-      "Matched provider file: %s (%.0f MB)",
-      match_info$url,
-      size_mb
-    ))
+    for (i in seq_along(match_infos)) {
+      message(sprintf(
+        "Matched provider file: %s (%.0f MB)",
+        match_infos[[i]]$url,
+        sizes_mb[[i]]
+      ))
+    }
   }
 
   if (
@@ -1019,7 +1038,7 @@ get_osm_features <- function(
   ) {
     stop(
       sprintf(
-        "Matched OSM extract is %.0f MB (> max_download_size_mb = %s). 
+        "Matched OSM extracts total %.0f MB (> max_download_size_mb = %s).
 Refusing to download. Try:
   • a smaller region, or
   • lowering match_level, or
@@ -1051,27 +1070,28 @@ Refusing to download. Try:
 
   # ---- Helper: Query a specific layer with error handling ----
   query_layer <- function(layer_name, extra_tags, verbose) {
-    tryCatch(
-      {
-        if (verbose) {
-          message(sprintf("Querying %s layer...", layer_name))
-        }
-        where_clause <- build_osm_where_clause(
-          tag_sets,
-          column_tags = union(osm_default_layer_tags(layer_name), extra_tags)
-        )
-        if (verbose) {
-          message("  SQL WHERE clause: ", where_clause)
-        }
+    if (verbose) {
+      message(sprintf("Querying %s layer...", layer_name))
+    }
+    where_clause <- build_osm_where_clause(
+      tag_sets,
+      column_tags = union(osm_default_layer_tags(layer_name), extra_tags)
+    )
+    if (verbose) {
+      message("  SQL WHERE clause: ", where_clause)
+    }
 
-        sql_query <- sprintf(
-          "SELECT * FROM '%s' WHERE %s",
-          layer_name,
-          where_clause
-        )
+    sql_query <- sprintf(
+      "SELECT * FROM '%s' WHERE %s",
+      layer_name,
+      where_clause
+    )
 
+    extract_results <- lapply(seq_along(match_inputs), function(i) {
+      tryCatch(
+        {
         result <- osmextract::oe_get(
-          place = match_input,
+          place = match_inputs[[i]],
           provider = provider,
           layer = layer_name,
           query = sql_query, # SQL runs at st_read() stage
@@ -1094,13 +1114,6 @@ Refusing to download. Try:
             region_geometry
           ))
 
-          if (verbose) {
-            message(sprintf(
-              "  Found %d features in %s",
-              nrow(result),
-              layer_name
-            ))
-          }
           list(data = result, error = NULL)
         } else {
           if (verbose) {
@@ -1111,13 +1124,36 @@ Refusing to download. Try:
       },
       error = function(e) {
         error_message <- sprintf(
-          "Error querying OSM %s layer: %s",
+          "Error querying OSM %s layer from %s: %s",
           layer_name,
+          as.character(match_inputs[[i]]),
           conditionMessage(e)
         )
         warning(error_message, call. = FALSE)
         list(data = empty_osm_sf(), error = conditionMessage(e))
       }
+      )
+    })
+
+    successful <- lapply(extract_results, `[[`, "data")
+    successful <- Filter(function(x) !is.null(x) && nrow(x) > 0L, successful)
+    combined <- if (length(successful) == 0L) {
+      empty_osm_sf()
+    } else {
+      result <- dplyr::bind_rows(successful)
+      if ("osm_id" %in% names(result)) {
+        result <- result[!duplicated(as.character(result$osm_id)), , drop = FALSE]
+      }
+      result
+    }
+    errors <- Filter(Negate(is.null), lapply(extract_results, `[[`, "error"))
+
+    if (verbose) {
+      message(sprintf("  Found %d unique features in %s", nrow(combined), layer_name))
+    }
+    list(
+      data = combined,
+      error = if (length(errors) == 0L) NULL else paste(errors, collapse = "; ")
     )
   }
 
@@ -1164,7 +1200,7 @@ Refusing to download. Try:
       ))
     } else {
       message(sprintf(
-        "OSM query completed with %d failed layer(s) (%s); returning empty data for failed layers",
+        "OSM query completed with %d failed layer(s) (%s); returning available data and marking those layers as failed",
         length(failed_layers),
         paste(failed_layers, collapse = ", ")
       ))

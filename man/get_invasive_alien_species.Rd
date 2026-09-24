@@ -11,7 +11,8 @@ get_invasive_alien_species(
   output_filename,
   geolocation = FALSE,
   verbose = FALSE,
-  max_retries = 3
+  max_retries = 3,
+  timeout_s = 30
 )
 }
 \arguments{
@@ -31,6 +32,9 @@ Default is FALSE.}
 
 \item{max_retries}{Integer. Maximum number of retry attempts for failed requests.
 Default is 3.}
+
+\item{timeout_s}{Numeric. Per-request timeout in seconds for GBIF occurrence
+searches. Default is 30.}
 }
 \value{
 A data.frame or sf object (if geolocation=TRUE) containing invasive

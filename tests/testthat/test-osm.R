@@ -166,6 +166,104 @@ test_that("OSM cache key separates explicit match places", {
     expect_false(identical(point_cache, place_cache))
 })
 
+test_that("OSM cache key includes all explicit match places", {
+    region <- sf::st_sf(
+        id = 1,
+        geometry = sf::st_sfc(sf::st_point(c(20.5, 44)), crs = 4326)
+    )
+    tag_sets <- list(amenity = "school")
+
+    one_extract <- omniAPIr:::osm_cache_file(
+        region, "geofabrik", 2, "points", tag_sets, tempdir(),
+        match_place = "Serbia"
+    )
+    two_extracts <- omniAPIr:::osm_cache_file(
+        region, "geofabrik", 2, "points", tag_sets, tempdir(),
+        match_place = c("Serbia", "Kosovo")
+    )
+
+    expect_false(identical(one_extract, two_extracts))
+})
+
+test_that("OSM extract coverage validation unions multiple provider zones", {
+    region <- sf::st_sf(
+        id = 1,
+        geometry = sf::st_as_sfc(sf::st_bbox(c(
+            xmin = 0, ymin = 0, xmax = 2, ymax = 1
+        ), crs = 4326))
+    )
+    west <- sf::st_sf(
+        geometry = sf::st_as_sfc(sf::st_bbox(c(
+            xmin = 0, ymin = 0, xmax = 1, ymax = 1
+        ), crs = 4326))
+    )
+    east <- sf::st_sf(
+        geometry = sf::st_as_sfc(sf::st_bbox(c(
+            xmin = 1, ymin = 0, xmax = 2, ymax = 1
+        ), crs = 4326))
+    )
+
+    local_mocked_bindings(
+        osm_extract_zone = function(match_info, provider) {
+            if (identical(match_info$url, "west")) west else east
+        },
+        .package = "omniAPIr"
+    )
+
+    expect_true(omniAPIr:::validate_osm_extract_coverage(
+        region_sf = region,
+        match_info = list(list(url = "west"), list(url = "east")),
+        provider = "geofabrik",
+        coverage_check = "error",
+        min_coverage = 0.98
+    ))
+})
+
+test_that("OSM multi-extract queries merge and deduplicate features", {
+    region <- sf::st_sf(
+        id = 1,
+        geometry = sf::st_as_sfc(sf::st_bbox(c(
+            xmin = 0, ymin = 0, xmax = 2, ymax = 1
+        ), crs = 4326))
+    )
+
+    queried_places <- character()
+    local_mocked_bindings(
+        validate_osm_extract_coverage = function(...) TRUE,
+        .package = "omniAPIr"
+    )
+    local_mocked_bindings(
+        oe_match = function(place, ...) {
+            list(url = paste0(place, ".pbf"), file_size = 1000)
+        },
+        oe_get = function(place, ...) {
+            place <- as.character(place)[[1]]
+            queried_places <<- c(queried_places, place)
+            ids <- if (place == "west") c("1", "2") else c("2", "3")
+            x <- if (place == "west") c(0.25, 0.75) else c(1.25, 1.75)
+            sf::st_sf(
+                osm_id = ids,
+                amenity = "school",
+                geometry = sf::st_sfc(
+                    lapply(x, function(x_coord) sf::st_point(c(x_coord, 0.5))),
+                    crs = 4326
+                )
+            )
+        },
+        .package = "osmextract"
+    )
+
+    result <- get_osm_features(
+        region_sf = region,
+        tag_sets = list(amenity = "school"),
+        match_place = c("west", "east"),
+        layers = "points"
+    )
+
+    expect_equal(queried_places, c("west", "east"))
+    expect_equal(sort(result$pts$osm_id), c("1", "2", "3"))
+})
+
 test_that("OSM extract coverage validation rejects partial provider zones", {
     india_bbox <- sf::st_as_sfc(sf::st_bbox(c(
         xmin = 68.1,

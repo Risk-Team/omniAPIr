@@ -9,7 +9,9 @@ get_who_data(
   iso3 = NULL,
   mrv = 10,
   exclude_aggregates = TRUE,
-  verbose = FALSE
+  verbose = FALSE,
+  max_retries = 3,
+  timeout_s = 30
 )
 }
 \arguments{
@@ -25,6 +27,11 @@ Default is 10.}
 aggregates using `countrycode` on ISO3 codes.}
 
 \item{verbose}{Logical. If TRUE, prints URLs and a final row count.}
+
+\item{max_retries}{Integer. Maximum number of retry attempts for failed
+requests. Default is 3.}
+
+\item{timeout_s}{Numeric. Per-request timeout in seconds. Default is 30.}
 }
 \value{
 A tibble with all original WHO fields plus:

@@ -33,11 +33,12 @@ combined query results.}
 \item{match_level}{Integer provider matching level passed to
 \code{osmextract::oe_match()} and \code{osmextract::oe_get()}.}
 
-\item{match_place}{Optional length-one character place name passed to
+\item{match_place}{Optional character vector of place names passed to
 \code{osmextract::oe_match()} and \code{osmextract::oe_get()}. When
 \code{NULL}, the provider extract is matched using a point inside
-\code{region_sf}. Supplying a country or region name is safer for
-national or large-area workflows.}
+\code{region_sf}. Multiple places are queried separately, validated for
+combined coverage, merged, and deduplicated by OSM ID. Supplying country
+or region names is safer for national or large-area workflows.}
 
 \item{max_download_size_mb}{Maximum matched extract size in MB. Set to
 \code{NA} to disable the check.}

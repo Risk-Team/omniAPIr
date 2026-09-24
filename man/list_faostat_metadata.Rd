@@ -31,7 +31,7 @@ Default is 3.}
 }
 \value{
 A data.frame containing code and label columns, plus metadata-specific
-code/name columns.
+  code/name columns.
 }
 \description{
 Lists FAOSTAT databases, elements, or items from the live FAOSTAT API.

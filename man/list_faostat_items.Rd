@@ -28,7 +28,7 @@ Default is 3.}
 }
 \value{
 A data.frame with item_code, item_name, code, label, aggregate_type,
-and code_list columns.
+  and code_list columns.
 }
 \description{
 Lists item codes and names for a FAOSTAT database. For Food Balance Sheets
