@@ -702,8 +702,8 @@ validate_osm_extract_coverage <- function(region_sf, match_info, provider,
 #'   \code{region_sf}. Multiple places are queried separately, validated for
 #'   combined coverage, merged, and deduplicated by OSM ID. Supplying country
 #'   or region names is safer for national or large-area workflows.
-#' @param max_download_size_mb Maximum matched extract size in MB. Set to
-#'   \code{NA} to disable the check.
+#' @param max_download_size_mb Maximum combined matched-extract size in MB.
+#'   Set to \code{NA} to disable the check.
 #' @param layers Character vector of osmextract layers to query.
 #' @param as_sf Logical. If TRUE, return sf objects. If FALSE, geometries are
 #'   dropped from returned layers.

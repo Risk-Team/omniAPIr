@@ -40,8 +40,8 @@ combined query results.}
 combined coverage, merged, and deduplicated by OSM ID. Supplying country
 or region names is safer for national or large-area workflows.}
 
-\item{max_download_size_mb}{Maximum matched extract size in MB. Set to
-\code{NA} to disable the check.}
+\item{max_download_size_mb}{Maximum combined matched-extract size in MB.
+Set to \code{NA} to disable the check.}
 
 \item{layers}{Character vector of osmextract layers to query.}
 
