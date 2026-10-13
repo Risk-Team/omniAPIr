@@ -214,3 +214,71 @@ test_that("get_faostat_data handles invalid items gracefully", {
         "Invalid item"
     )
 })
+
+test_that("get_faostat_data resolves FBS losses and domestic supply items", {
+    skip_if_not_installed("httr")
+
+    result <- get_faostat_data(
+        element = "2120,2300",
+        item = c("cereals", "fruits", "vegetables", "pulses"),
+        database = "FBS",
+        iso3 = "LBY",
+        mrv = 15,
+        verbose = FALSE
+    )
+
+    expect_s3_class(result, "data.frame")
+    expect_true(nrow(result) > 0)
+    expect_setequal(unique(result$element_name), c("Losses", "Domestic supply quantity"))
+    expect_setequal(unique(result$item_code), c("2905", "2919", "2918", "2911"))
+})
+
+test_that("get_faostat_data resolves CAHD legumes and oils cost items", {
+    skip_if_not_installed("httr")
+
+    result <- get_faostat_data(
+        element = "6120",
+        item = c("legumes_nuts_seeds", "oils_fats"),
+        database = "CAHD",
+        iso3 = "EGY",
+        mrv = 10,
+        verbose = FALSE
+    )
+
+    expect_s3_class(result, "data.frame")
+    expect_true(nrow(result) > 0)
+    expect_setequal(
+        unique(result$Item),
+        c("Cost of legumes, nuts and seeds", "Cost of oils and fats")
+    )
+})
+
+test_that("get_faostat_data resolves GT emissions items", {
+    skip_if_not_installed("httr")
+
+    result <- get_faostat_data(
+        element = "723113",
+        item = c("agrifood_systems", "all_sectors_without_lulucf"),
+        database = "GT",
+        iso3 = "LBY",
+        mrv = 10,
+        verbose = FALSE
+    )
+
+    expect_s3_class(result, "data.frame")
+    expect_true(nrow(result) > 0)
+    expect_setequal(unique(result$item_code), c("6518", "6829"))
+    expect_equal(unique(result$Unit), "kt")
+})
+
+test_that("get_faostat_data rejects unknown GT emissions items", {
+    expect_error(
+        get_faostat_data(
+            element = "723113",
+            item = "invalid_sector",
+            database = "GT",
+            use_lookup = TRUE
+        ),
+        "Invalid item"
+    )
+})

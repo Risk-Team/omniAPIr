@@ -408,7 +408,7 @@ list_faostat_metadata <- function(
 #' Statistics (FAOSTAT) API with built-in lookup tables for common items.
 #'
 #' **Note:** This function is designed for specific datasets and is not comprehensive.
-#' It works best with QCL, FBS, FS, CAHD, RFN, RFB, RP, and RL databases and common agricultural elements (2111, 2413, 2510, 2515, 7209, 664, 674, 645, 6120).
+#' It works best with QCL, FBS, FS, CAHD, RFN, RFB, RP, RL, and GT databases and common agricultural elements (2111, 2413, 2510, 2515, 7209, 664, 674, 645, 2120, 2300, 6120, 723113).
 #'
 #' @importFrom magrittr %>%
 #'
@@ -458,6 +458,8 @@ list_faostat_metadata <- function(
 #'   \item \strong{Element 664 (Food supply kcal/capita/day)} - Dietary energy supply
 #'   \item \strong{Element 674 (Protein supply quantity)} - Protein supply data
 #'   \item \strong{Element 645 (Food supply quantity kg/capita/year)} - Food supply by food group
+#'   \item \strong{Elements 2120 (Losses) and 2300 (Domestic supply quantity)} - FBS supply-utilization quantities (1000 t)
+#'   \item \strong{Element 723113 (Emissions CO2eq AR5, GT database)} - Greenhouse gas emission totals (kt)
 #'   \item \strong{Element 6120 (Cost indicators)} - Food security indicators (FS) and diet cost (CAHD)
 #' }
 #'
@@ -469,16 +471,17 @@ list_faostat_metadata <- function(
 #'   \item \strong{Fertilizer products (Elements 2510 and 2515, RFB database):} npk, urea, ammonium_sulfate
 #'   \item \strong{Pesticides (Element 2515, RP database):} pesticides_total
 #'   \item \strong{Land use (Element 7209, RL database):} agricultural_land, forest_land
-#'   \item \strong{Food Balance Sheets (Elements 645, 664, 674):} grand_total, total, cereals, starchy_roots, pulses, treenuts, vegetables, fruits, eggs, meat, fish, milk, vegetable_oils (aggregated food groups)
+#'   \item \strong{Food Balance Sheets (Elements 645, 664, 674, 2120, 2300):} grand_total, total, cereals, starchy_roots, pulses, treenuts, vegetables, fruits, eggs, meat, fish, milk, vegetable_oils (aggregated food groups)
 #'   \item \strong{Food Security SDG indicators (Element 6120 - FS database):} undernourishment/pou/sdg_2_1_1 (SDG 2.1.1), food_insecurity/fies/sdg_2_1_2 (SDG 2.1.2), cereals_roots_tubers (3-year averages)
-#'   \item \strong{CAHD Cost Indicators (Element 6120 - CAHD database):} healthy_diet, starchy_staples, animal_source_food, vegetables, fruits (cost in PPP$/person/day)
+#'   \item \strong{CAHD Cost Indicators (Element 6120 - CAHD database):} healthy_diet, starchy_staples, animal_source_food, legumes_nuts_seeds, vegetables, fruits, oils_fats (cost in PPP$/person/day)
+#'   \item \strong{GT Emissions Totals (Element 723113 - GT database):} agrifood_systems, farm_gate, land_use_change, pre_post_production, all_sectors_without_lulucf, all_sectors_with_lulucf (kt CO2eq, AR5)
 #'   \item \strong{CAHD Affordability Indicators (Element 6120 - CAHD database):} people_unable_afford/nua_millions (millions), percent_unable_afford/pua_percent (%)
 #' }
 #'
 #' **Limitations:**
 #' \itemize{
-#'   \item Only works with specific element codes (2111, 2413, 2510, 2515, 7209, 664, 674, 645, 6120)
-#'   \item Primarily designed for QCL, FBS, FS, CAHD, RFN, RFB, RP, and RL databases
+#'   \item Only works with specific element codes (2111, 2413, 2510, 2515, 7209, 664, 674, 645, 2120, 2300, 6120, 723113)
+#'   \item Primarily designed for QCL, FBS, FS, CAHD, RFN, RFB, RP, RL, and GT databases
 #'   \item Lookup tables are limited to common agricultural items
 #'   \item For other databases/elements, use \code{use_lookup = FALSE} and provide exact codes
 #'   \item FS database uses 3-year averages (e.g., 2000 represents 2000-2002)
@@ -794,6 +797,10 @@ get_faostat_data <- function(
     "cost_vegetables" = "7010",
     "fruits" = "7011",
     "cost_fruits" = "7011",
+    "legumes_nuts_seeds" = "7009",
+    "cost_legumes_nuts_seeds" = "7009",
+    "oils_fats" = "7012",
+    "cost_oils_fats" = "7012",
     # Affordability indicators
     "people_unable_afford" = "7006",
     "nua_millions" = "7006",
@@ -801,6 +808,16 @@ get_faostat_data <- function(
     "percent_unable_afford" = "7005",
     "pua_percent" = "7005",
     "share_unable_afford" = "7005"
+  )
+
+  # GT (Emissions Totals) lookup - Element 723113, Emissions (CO2eq) (AR5) in kt
+  emissions_lookup <- list(
+    "agrifood_systems" = "6518",
+    "farm_gate" = "6996",
+    "land_use_change" = "6516",
+    "pre_post_production" = "6517",
+    "all_sectors_without_lulucf" = "6829",
+    "all_sectors_with_lulucf" = "6825"
   )
 
   # Helper function to try fetching data with specific years
@@ -846,6 +863,9 @@ get_faostat_data <- function(
             "664" = fbs_lookup, # Food supply (kcal/capita/day) - FBS aggregated food groups
             "674" = fbs_lookup, # Protein supply quantity - FBS aggregated food groups
             "645" = fbs_lookup, # Food supply quantity (kg/capita/year) - FBS aggregated food groups
+            "2120" = fbs_lookup, # Losses (1000 t) - FBS aggregated food groups
+            "2300" = fbs_lookup, # Domestic supply quantity (1000 t) - FBS aggregated food groups
+            "723113" = emissions_lookup, # Emissions (CO2eq) (AR5) - GT
             "6120" = fs_lookup, # Food Security indicators (3-year averages) - FS database
             NULL
           )
@@ -895,6 +915,9 @@ get_faostat_data <- function(
     # 664 = Food supply (kcal/capita/day) - FBS
     # 674 = Protein supply quantity - FBS
     # 645 = Food supply quantity (kg/capita/year) - FBS
+    # 2120 = Losses (1000 t) - FBS
+    # 2300 = Domestic supply quantity (1000 t) - FBS
+    # 723113 = Emissions (CO2eq) (AR5) (kt) - GT
     # 6120 = Food Security indicators (3-year averages) - FS / Cost indicators (PPP$/person/day) - CAHD
     # Items
     #  "866,1057,1016,976" Cattle, sheep, chicken and goats
@@ -908,7 +931,8 @@ get_faostat_data <- function(
     # "21004" # FS: Prevalence of undernourishment (SDG 2.1.1) (%) - 3-year average
     # "21009" # FS: Prevalence of moderate or severe food insecurity (SDG 2.1.2) (%) - 3-year average
     # "21012" # FS: Share of dietary energy from cereals, roots, and tubers (%) - 3-year average
-    # "7004,7007,7008,7010,7011" # CAHD cost indicators (healthy diet, starchy staples, animal food, vegetables, fruits)
+    # "7004,7007,7008,7009,7010,7011,7012" # CAHD cost indicators (healthy diet, starchy staples, animal food, legumes/nuts/seeds, vegetables, fruits, oils/fats)
+    # "6518,6996,6516,6517,6829,6825" # GT emissions (agrifood systems, farm gate, land-use change, pre/post-production, all sectors without/with LULUCF)
     # "7006" # CAHD: Number of people unable to afford a healthy diet (NUA), millions
     # "7005" # CAHD: Percent of population unable to afford a healthy diet (PUA), %
     base <- paste0("https://faostatservices.fao.org/api/v1/en/data/", database)
