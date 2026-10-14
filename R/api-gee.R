@@ -276,6 +276,13 @@ download_and_process_ee_image <- function(
 #' @param conda_env Character string specifying the conda environment with ee and geemap packages
 #' @param verbose Logical, whether to print progress messages (default: TRUE)
 #' @param max_retries Numeric, maximum number of retry attempts for API calls (default: 3)
+#' @param ee_filter Optional Earth Engine `Filter`, applied after the region filter and
+#'   before download. A function is called with the filtered FeatureCollection and must
+#'   return a FeatureCollection.
+#' @param properties Optional character vector of FeatureCollection properties to download.
+#'   Geometry is retained.
+#' @param geometry_type Character, `"polygon"` (default) or `"line"`. `"line"` drops
+#'   non-line pieces left by the country intersection so the result stays lines.
 #'
 #' @return An sf object containing the downloaded and processed vector data, or a modified
 #'         version of region_sf with empty result values if no features are found
@@ -321,6 +328,22 @@ download_and_process_ee_image <- function(
 #'   download_type = "geojson",
 #'   conda_env = "gee_env"
 #' )
+#'
+#' # Main river reaches only, kept as lines
+#' ee <- reticulate::import("ee")
+#' rivers <- download_and_process_ee_vector(
+#'   asset_id = "WWF/HydroSHEDS/v1/FreeFlowingRivers",
+#'   output_filename = "rivers.geojson",
+#'   region = region_ee,
+#'   region_sf = region_sf,
+#'   column_empty_return = "CSI",
+#'   value_empty_return = NA_real_,
+#'   download_type = "geojson",
+#'   conda_env = "gee_env",
+#'   ee_filter = ee$Filter$lte("RIV_ORD", 6),
+#'   properties = c("DOF", "DOR", "CSI", "CSI_D", "DIS_AV_CMS", "RIV_ORD"),
+#'   geometry_type = "line"
+#' )
 #' }
 #'
 #' @importFrom magrittr %>%
@@ -335,8 +358,26 @@ download_and_process_ee_vector <- function(
     download_type = "shp",
     conda_env = NULL,
     verbose = TRUE,
-    max_retries = 3
+    max_retries = 3,
+    ee_filter = NULL,
+    properties = NULL,
+    geometry_type = c("polygon", "line")
 ) {
+    geometry_type <- match.arg(geometry_type)
+    if (
+        !is.null(properties) &&
+            (
+                !is.character(properties) ||
+                    length(properties) == 0 ||
+                    anyNA(properties) ||
+                    any(!nzchar(properties))
+            )
+    ) {
+        stop(
+            "`properties` must be a non-empty character vector of Earth Engine property names.",
+            call. = FALSE
+        )
+    }
     # Validate conda_env parameter
     if (is.null(conda_env)) {
         stop(
@@ -386,7 +427,11 @@ download_and_process_ee_vector <- function(
     }
 
     # Filter the asset by the download_region_ee *before* checking size or downloading
-    filtered_asset <- ee$FeatureCollection(asset_id)$filterBounds(region)
+    filtered_asset <- .prepare_ee_feature_collection(
+        ee$FeatureCollection(asset_id)$filterBounds(region),
+        ee_filter = ee_filter,
+        properties = properties
+    )
 
     # Step 1: Check if the Earth Engine FeatureCollection is empty
     count <- filtered_asset$size()$getInfo()
@@ -458,6 +503,9 @@ download_and_process_ee_vector <- function(
 
         # Intersect the sf object
         intersected_sf <- sf::st_intersection(downloaded_sf, region_sf)
+        if (geometry_type == "line") {
+            intersected_sf <- .keep_linear_features(intersected_sf)
+        }
 
         if (verbose) {
             message("Vector processing completed successfully")
@@ -465,4 +513,33 @@ download_and_process_ee_vector <- function(
 
         return(intersected_sf)
     }
+}
+
+.prepare_ee_feature_collection <- function(
+    feature_collection,
+    ee_filter = NULL,
+    properties = NULL
+) {
+    if (is.function(ee_filter)) {
+        feature_collection <- ee_filter(feature_collection)
+    } else if (!is.null(ee_filter)) {
+        feature_collection <- feature_collection$filter(ee_filter)
+    }
+
+    if (!is.null(properties)) {
+        feature_collection <- feature_collection$select(as.list(properties))
+    }
+
+    feature_collection
+}
+
+.keep_linear_features <- function(features) {
+    if (nrow(features) == 0) {
+        return(features)
+    }
+
+    linear <- suppressWarnings(
+        sf::st_collection_extract(features, "LINESTRING")
+    )
+    linear[!sf::st_is_empty(sf::st_geometry(linear)), , drop = FALSE]
 }

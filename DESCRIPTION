@@ -14,6 +14,7 @@ Maintainer: Riccardo Soldan <riccardosoldan@hotmail.it>
 Description: Provides a unified interface to retrieve data from multiple international
     APIs including ACLED (conflict data), ILO (labor statistics), WHO (health indicators),
     FAOSTAT (agriculture data), World Bank, UN SDG, UNDP HDR, FAO EMPRES-i (animal diseases),
+    GEMStat (freshwater quality station means),
     IBAT (biodiversity), Giga (school connectivity), Climate Watch (NDC data), HDX HAPI
     (humanitarian data), GBIF/GRIIS (invasive species), OpenStreetMap, FAO Fishstat,
     and Copernicus Marine. All functions feature consistent
