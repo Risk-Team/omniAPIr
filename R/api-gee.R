@@ -17,6 +17,10 @@
 #' @param conda_env Character string specifying the conda environment with ee and geemap packages
 #' @param verbose Logical, whether to print progress messages (default: TRUE)
 #' @param max_retries Numeric, maximum number of retry attempts for API calls (default: 3)
+#' @param max_tile_size Numeric, maximum download tile size in MB passed to
+#'   geemap/geedim (default: NULL, geedim's default). Lower it when tiles fail
+#'   with "User memory limit exceeded", e.g. for images aggregated with
+#'   reduceResolution.
 #'
 #' @return A terra raster object cropped and masked to the specified region
 #'
@@ -80,7 +84,8 @@ download_and_process_ee_image <- function(
     convert_uint8 = TRUE,
     conda_env = NULL,
     verbose = TRUE,
-    max_retries = 3
+    max_retries = 3,
+    max_tile_size = NULL
 ) {
     # Validate conda_env parameter
     if (is.null(conda_env)) {
@@ -215,7 +220,8 @@ download_and_process_ee_image <- function(
                     filename = output_filename,
                     scale = res,
                     region = region,
-                    crs = crs
+                    crs = crs,
+                    max_tile_size = max_tile_size
                 )
                 break
             },

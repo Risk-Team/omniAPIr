@@ -17,7 +17,8 @@ download_and_process_ee_image(
   convert_uint8 = TRUE,
   conda_env = NULL,
   verbose = TRUE,
-  max_retries = 3
+  max_retries = 3,
+  max_tile_size = NULL
 )
 }
 \arguments{
@@ -46,6 +47,11 @@ download_and_process_ee_image(
 \item{verbose}{Logical, whether to print progress messages (default: TRUE)}
 
 \item{max_retries}{Numeric, maximum number of retry attempts for API calls (default: 3)}
+
+\item{max_tile_size}{Numeric, maximum download tile size in MB passed to
+geemap/geedim (default: NULL, geedim's default). Lower it when tiles fail
+with "User memory limit exceeded", e.g. for images aggregated with
+reduceResolution.}
 }
 \value{
 A terra raster object cropped and masked to the specified region
