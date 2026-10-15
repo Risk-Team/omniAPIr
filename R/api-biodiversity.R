@@ -614,18 +614,18 @@ get_invasive_alien_species <- function(
   }
 
   # Alien species
-  alien <- readr::read_table(
+  alien <- readr::read_tsv(
     files[stringr::str_detect(files, "distribution")],
     show_col_types = FALSE
   ) %>%
-    dplyr::filter(countryCode == iso2)
+    dplyr::filter(toupper(trimws(countryCode)) == toupper(iso2))
 
   # Invasive species
-  invasive <- readr::read_table(
+  invasive <- readr::read_tsv(
     files[stringr::str_detect(files, "speciesprofile")],
     show_col_types = FALSE
   ) %>%
-    dplyr::filter(isInvasive == "Invasive")
+    dplyr::filter(tolower(trimws(isInvasive)) == "invasive")
 
   taxonomy <- readr::read_tsv(
     files[stringr::str_detect(files, "taxon")],

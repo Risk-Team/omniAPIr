@@ -8,11 +8,11 @@ test_that("get_invasive_alien_species errors after exhausted occurrence retries"
     on.exit(unlink(tmp_dir, recursive = TRUE), add = TRUE)
 
     writeLines(
-        c("id countryCode", "1 US"),
+        c("id\tcountryCode", "1\tUS"),
         file.path(tmp_dir, "distribution.txt")
     )
     writeLines(
-        c("id isInvasive", "1 Invasive"),
+        c("id\tisInvasive", "1\tInvasive"),
         file.path(tmp_dir, "speciesprofile.txt")
     )
     writeLines(
@@ -71,6 +71,77 @@ test_that("get_invasive_alien_species errors after exhausted occurrence retries"
     )
 })
 
+test_that("get_invasive_alien_species parses tab-separated lowercase GRIIS flags", {
+    skip_if_not_installed("rgbif")
+    skip_if_not_installed("readr")
+
+    tmp_dir <- tempfile("griis-lowercase-")
+    dir.create(tmp_dir)
+    on.exit(unlink(tmp_dir, recursive = TRUE), add = TRUE)
+
+    writeLines(
+        c("id\tcountryCode\toccurrenceStatus", "1\tAR\tpresent"),
+        file.path(tmp_dir, "distribution.txt")
+    )
+    writeLines(
+        c("id\tisInvasive\thabitat", "1\tinvasive\tterrestrial"),
+        file.path(tmp_dir, "speciesprofile.txt")
+    )
+    writeLines(
+        c("id\ttaxonID\tscientificName", "1\t1\tAira elegantissima Schur"),
+        file.path(tmp_dir, "taxon.txt")
+    )
+
+    old_wd <- setwd(tmp_dir)
+    on.exit(setwd(old_wd), add = TRUE)
+    utils::zip(
+        "griis.zip",
+        c("distribution.txt", "speciesprofile.txt", "taxon.txt")
+    )
+    setwd(old_wd)
+    zip_path <- file.path(tmp_dir, "griis.zip")
+
+    local_mocked_bindings(
+        dataset_export = function(...) {
+            data.frame(
+                title = "Global Register of Introduced and Invasive Species - Argentina",
+                datasetKey = "fake-key",
+                stringsAsFactors = FALSE
+            )
+        },
+        dataset_endpoint = function(...) {
+            data.frame(
+                type = "DWC_ARCHIVE",
+                url = "http://example.invalid/griis.zip",
+                stringsAsFactors = FALSE
+            )
+        },
+        .package = "rgbif"
+    )
+    local_mocked_bindings(
+        download.file = function(url, destfile, ...) {
+            ok <- file.copy(zip_path, destfile, overwrite = TRUE)
+            if (!isTRUE(ok)) {
+                stop("failed to copy fixture zip", call. = FALSE)
+            }
+            invisible(0L)
+        },
+        .package = "utils"
+    )
+
+    result <- get_invasive_alien_species(
+        iso3 = "ARG",
+        output_filename = file.path(tmp_dir, "out.zip"),
+        geolocation = FALSE,
+        verbose = FALSE,
+        max_retries = 1
+    )
+
+    expect_equal(nrow(result), 1)
+    expect_equal(result$scientificName, "Aira elegantissima Schur")
+    expect_equal(result$habitat, "terrestrial")
+})
+
 test_that("get_invasive_alien_species applies per-attempt curl timeout", {
     skip_if_not_installed("rgbif")
     skip_if_not_installed("readr")
@@ -80,11 +151,11 @@ test_that("get_invasive_alien_species applies per-attempt curl timeout", {
     on.exit(unlink(tmp_dir, recursive = TRUE), add = TRUE)
 
     writeLines(
-        c("id countryCode", "1 US"),
+        c("id\tcountryCode", "1\tUS"),
         file.path(tmp_dir, "distribution.txt")
     )
     writeLines(
-        c("id isInvasive", "1 Invasive"),
+        c("id\tisInvasive", "1\tInvasive"),
         file.path(tmp_dir, "speciesprofile.txt")
     )
     writeLines(
