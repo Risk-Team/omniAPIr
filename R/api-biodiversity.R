@@ -524,7 +524,10 @@ get_invasive_alien_species <- function(
       stringr::str_detect(
         title,
         stringr::regex(
-          "^Global Register of Introduced and Invasive Species",
+          paste0(
+            "^(Global Register of Introduced and Invasive Species|",
+            "GRIIS Checklist of Introduced and Invasive Species)"
+          ),
           ignore_case = TRUE
         )
       )
@@ -539,9 +542,35 @@ get_invasive_alien_species <- function(
   cand_norm <- unique(.normalize_country_key(candidates))
   pattern <- paste(cand_norm, collapse = "|")
 
-  griis_key <- griis_rows$datasetKey[
-    stringr::str_detect(title_norm, pattern)
-  ][1]
+  matching_rows <- which(stringr::str_detect(title_norm, pattern))
+  preferred_titles <- as.vector(outer(
+    c(
+      "globalregisterofintroducedandinvasivespecies",
+      "griischecklistofintroducedandinvasivespecies"
+    ),
+    cand_norm,
+    paste0
+  ))
+
+  if (length(matching_rows)) {
+    ranked_matches <- dplyr::tibble(
+      row = matching_rows,
+      exact_country_checklist = title_norm[matching_rows] %in% preferred_titles,
+      protected_area = stringr::str_detect(
+        griis_rows$title[matching_rows],
+        stringr::regex("protected areas", ignore_case = TRUE)
+      ),
+      title_length = nchar(title_norm[matching_rows])
+    ) %>%
+      dplyr::arrange(
+        dplyr::desc(exact_country_checklist),
+        protected_area,
+        title_length
+      )
+    griis_key <- griis_rows$datasetKey[ranked_matches$row[1]]
+  } else {
+    griis_key <- NA_character_
+  }
 
   if (is.na(griis_key)) {
     guess <- dplyr::tibble(
@@ -618,14 +647,22 @@ get_invasive_alien_species <- function(
     files[stringr::str_detect(files, "distribution")],
     show_col_types = FALSE
   ) %>%
-    dplyr::filter(toupper(trimws(countryCode)) == toupper(iso2))
+    dplyr::filter(
+      toupper(trimws(countryCode)) == toupper(iso2) |
+        startsWith(
+          toupper(trimws(countryCode)),
+          paste0(toupper(iso2), "-")
+        )
+    )
 
   # Invasive species
   invasive <- readr::read_tsv(
     files[stringr::str_detect(files, "speciesprofile")],
     show_col_types = FALSE
   ) %>%
-    dplyr::filter(tolower(trimws(isInvasive)) == "invasive")
+    dplyr::filter(
+      tolower(trimws(isInvasive)) %in% c("invasive", "yes", "true", "1")
+    )
 
   taxonomy <- readr::read_tsv(
     files[stringr::str_detect(files, "taxon")],
