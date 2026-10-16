@@ -14,7 +14,11 @@ download_and_process_ee_vector(
   download_type = "shp",
   conda_env = NULL,
   verbose = TRUE,
-  max_retries = 3
+  max_retries = 3,
+  ee_filter = NULL,
+  properties = NULL,
+  geometry_type = c("polygon", "line"),
+  max_features_per_request = 4000
 )
 }
 \arguments{
@@ -37,6 +41,20 @@ download_and_process_ee_vector(
 \item{verbose}{Logical, whether to print progress messages (default: TRUE)}
 
 \item{max_retries}{Numeric, maximum number of retry attempts for API calls (default: 3)}
+
+\item{ee_filter}{Optional Earth Engine `Filter`, applied after the region filter and
+before download. A function is called with the filtered FeatureCollection and must
+return a FeatureCollection.}
+
+\item{properties}{Optional character vector of FeatureCollection properties to download.
+Geometry is retained.}
+
+\item{geometry_type}{Character, `"polygon"` (default) or `"line"`. `"line"` drops
+non-line pieces left by the country intersection so the result stays lines.}
+
+\item{max_features_per_request}{Positive integer no greater than 5000. Feature
+collections larger than this are downloaded in pages and combined locally
+(default: 4000).}
 }
 \value{
 An sf object containing the downloaded and processed vector data, or a modified
@@ -87,6 +105,22 @@ settlements <- download_and_process_ee_vector(
   value_empty_return = 0,
   download_type = "geojson",
   conda_env = "gee_env"
+)
+
+# Main river reaches only, kept as lines
+ee <- reticulate::import("ee")
+rivers <- download_and_process_ee_vector(
+  asset_id = "WWF/HydroSHEDS/v1/FreeFlowingRivers",
+  output_filename = "rivers.geojson",
+  region = region_ee,
+  region_sf = region_sf,
+  column_empty_return = "CSI",
+  value_empty_return = NA_real_,
+  download_type = "geojson",
+  conda_env = "gee_env",
+  ee_filter = ee$Filter$lte("RIV_ORD", 6),
+  properties = c("DOF", "DOR", "CSI", "CSI_D", "DIS_AV_CMS", "RIV_ORD"),
+  geometry_type = "line"
 )
 }
 

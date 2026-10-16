@@ -283,6 +283,9 @@ download_and_process_ee_image <- function(
 #'   Geometry is retained.
 #' @param geometry_type Character, `"polygon"` (default) or `"line"`. `"line"` drops
 #'   non-line pieces left by the country intersection so the result stays lines.
+#' @param max_features_per_request Positive integer no greater than 5000. Feature
+#'   collections larger than this are downloaded in pages and combined locally
+#'   (default: 4000).
 #'
 #' @return An sf object containing the downloaded and processed vector data, or a modified
 #'         version of region_sf with empty result values if no features are found
@@ -361,9 +364,25 @@ download_and_process_ee_vector <- function(
     max_retries = 3,
     ee_filter = NULL,
     properties = NULL,
-    geometry_type = c("polygon", "line")
+    geometry_type = c("polygon", "line"),
+    max_features_per_request = 4000
 ) {
     geometry_type <- match.arg(geometry_type)
+    if (
+        length(max_features_per_request) != 1 ||
+            !is.numeric(max_features_per_request) ||
+            is.na(max_features_per_request) ||
+            !is.finite(max_features_per_request) ||
+            max_features_per_request < 1 ||
+            max_features_per_request > 5000 ||
+            max_features_per_request != as.integer(max_features_per_request)
+    ) {
+        stop(
+            "`max_features_per_request` must be an integer from 1 to 5000.",
+            call. = FALSE
+        )
+    }
+    max_features_per_request <- as.integer(max_features_per_request)
     if (
         !is.null(properties) &&
             (
@@ -453,47 +472,117 @@ download_and_process_ee_vector <- function(
             message("Found ", count, " features, downloading...")
         }
 
-        # Step 2: If the collection is not empty, export and process
-        # The region argument for ee_export_vector is implicitly handled by filtering
-        # the asset_id with download_region_ee above.
+        page_specs <- .ee_vector_page_specs(
+            count,
+            max_features_per_request
+        )
+        page_count <- nrow(page_specs)
+        if (page_count == 1) {
+            page_filenames <- output_filename
+        } else {
+            page_dir <- tempfile(
+                pattern = "ee-vector-pages-",
+                tmpdir = dirname(output_filename)
+            )
+            dir.create(page_dir)
+            on.exit(unlink(page_dir, recursive = TRUE, force = TRUE), add = TRUE)
+            extension <- if (download_type == "shp") ".shp" else ".geojson"
+            page_filenames <- file.path(
+                page_dir,
+                sprintf("page-%05d%s", seq_len(page_count), extension)
+            )
+            if (verbose) {
+                message(
+                    "Splitting download into ",
+                    page_count,
+                    " requests of at most ",
+                    max_features_per_request,
+                    " features"
+                )
+            }
+        }
 
-        # Download with retry logic
-        for (attempt in 1:max_retries) {
-            tryCatch(
-                {
-                    if (download_type == "shp") {
-                        geemap$ee_export_vector(
-                            filtered_asset, # Use the filtered asset
-                            output_filename
-                        )
-                        downloaded_sf <- sf::st_read(output_filename)
-                    } else if (download_type == "geojson") {
-                        geemap$ee_to_geojson(
-                            filtered_asset, # Use the filtered asset
-                            output_filename
-                        )
-                        downloaded_sf <- geojsonsf::geojson_sf(output_filename)
+        downloaded_parts <- vector("list", page_count)
+        for (page_index in seq_len(page_count)) {
+            page_asset <- if (page_count == 1) {
+                filtered_asset
+            } else {
+                ee$FeatureCollection(filtered_asset$toList(
+                    page_specs$size[[page_index]],
+                    page_specs$offset[[page_index]]
+                ))
+            }
+            if (verbose && page_count > 1) {
+                message(
+                    "Downloading vector page ",
+                    page_index,
+                    " of ",
+                    page_count
+                )
+            }
+
+            for (attempt in seq_len(max_retries)) {
+                tryCatch(
+                    {
+                        if (download_type == "shp") {
+                            geemap$ee_export_vector(
+                                page_asset,
+                                page_filenames[[page_index]]
+                            )
+                            downloaded_parts[[page_index]] <- sf::st_read(
+                                page_filenames[[page_index]],
+                                quiet = TRUE
+                            )
+                        } else {
+                            geemap$ee_to_geojson(
+                                page_asset,
+                                page_filenames[[page_index]]
+                            )
+                            downloaded_parts[[page_index]] <-
+                                geojsonsf::geojson_sf(page_filenames[[page_index]])
+                        }
+                        break
+                    },
+                    error = function(e) {
+                        if (attempt == max_retries) {
+                            stop(
+                                "Failed to download vector data page ",
+                                page_index,
+                                " of ",
+                                page_count,
+                                " after ",
+                                max_retries,
+                                " attempts: ",
+                                e$message
+                            )
+                        }
+                        if (verbose) {
+                            message(
+                                "Download attempt ",
+                                attempt,
+                                " for page ",
+                                page_index,
+                                " failed, retrying..."
+                            )
+                        }
+                        Sys.sleep(2^attempt)
                     }
-                    break
+                )
+            }
+        }
+
+        downloaded_sf <- dplyr::bind_rows(downloaded_parts)
+        if (page_count > 1) {
+            sf::st_write(
+                downloaded_sf,
+                output_filename,
+                driver = if (download_type == "shp") {
+                    "ESRI Shapefile"
+                } else {
+                    "GeoJSON"
                 },
-                error = function(e) {
-                    if (attempt == max_retries) {
-                        stop(
-                            "Failed to download vector data after ",
-                            max_retries,
-                            " attempts: ",
-                            e$message
-                        )
-                    }
-                    if (verbose) {
-                        message(
-                            "Download attempt ",
-                            attempt,
-                            " failed, retrying..."
-                        )
-                    }
-                    Sys.sleep(2^attempt) # Exponential backoff
-                }
+                delete_layer = TRUE,
+                quiet = TRUE
             )
         }
 
@@ -513,6 +602,18 @@ download_and_process_ee_vector <- function(
 
         return(intersected_sf)
     }
+}
+
+.ee_vector_page_specs <- function(count, max_features_per_request) {
+    offsets <- seq.int(
+        from = 0,
+        to = count - 1,
+        by = max_features_per_request
+    )
+    data.frame(
+        offset = as.integer(offsets),
+        size = as.integer(pmin(max_features_per_request, count - offsets))
+    )
 }
 
 .prepare_ee_feature_collection <- function(

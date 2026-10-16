@@ -25,6 +25,30 @@ test_that("download_and_process_ee_vector rejects new arguments before starting 
         ),
         "properties"
     )
+    expect_error(
+        download_and_process_ee_vector(
+            asset_id = "x",
+            output_filename = "x.geojson",
+            region = NULL,
+            region_sf = NULL,
+            column_empty_return = "CSI",
+            value_empty_return = NA,
+            conda_env = "gee_llm",
+            max_features_per_request = 5001
+        ),
+        "max_features_per_request"
+    )
+})
+
+test_that("large Earth Engine collections are split below the response cap", {
+    pages <- omniAPIr:::.ee_vector_page_specs(
+        count = 10001,
+        max_features_per_request = 4000
+    )
+
+    expect_equal(pages$offset, c(0L, 4000L, 8000L))
+    expect_equal(pages$size, c(4000L, 4000L, 2001L))
+    expect_true(all(pages$size <= 4000L))
 })
 
 test_that("line results drop points left by an intersection", {
