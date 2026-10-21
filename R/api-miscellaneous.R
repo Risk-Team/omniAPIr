@@ -850,6 +850,17 @@ get_osm_feature_class <- function(
     })
   }
 
+  attr(result, "osm_failed_layers") <- attr(
+    combined_features,
+    "osm_failed_layers",
+    exact = TRUE
+  )
+  attr(result, "osm_query_errors") <- attr(
+    combined_features,
+    "osm_query_errors",
+    exact = TRUE
+  )
+
   result
 }
 

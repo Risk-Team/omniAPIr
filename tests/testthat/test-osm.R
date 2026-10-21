@@ -373,7 +373,7 @@ test_that("OSM feature class API splits one combined query by class", {
     expect_equal(result$schools$pts$feature_label, "Schools")
 })
 
-test_that("OSM feature class API does not cache failed layer queries", {
+test_that("OSM feature class API exposes and does not cache failed layer queries", {
     region <- sf::st_sf(
         id = 1,
         geometry = sf::st_sfc(sf::st_point(c(36.8, -1.3)), crs = 4326)
@@ -398,11 +398,24 @@ test_that("OSM feature class API does not cache failed layer queries", {
         }
     )
 
-    get_osm_feature_class(region, "schools", cache_dir = cache_dir, layers = "points")
-    get_osm_feature_class(region, "schools", cache_dir = cache_dir, layers = "points")
+    first <- get_osm_feature_class(
+        region,
+        "schools",
+        cache_dir = cache_dir,
+        layers = "points"
+    )
+    second <- get_osm_feature_class(
+        region,
+        "schools",
+        cache_dir = cache_dir,
+        layers = "points"
+    )
 
     expect_equal(query_count, 2)
     expect_length(list.files(cache_dir, pattern = "[.]rds$"), 0)
+    expect_equal(attr(first, "osm_failed_layers"), "points")
+    expect_equal(attr(first, "osm_query_errors")$points, "test failure")
+    expect_equal(attr(second, "osm_failed_layers"), "points")
 })
 
 test_that("OSM feature class API caches successful empty queries", {
