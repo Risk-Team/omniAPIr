@@ -219,6 +219,54 @@ test_that("OSM extract coverage validation unions multiple provider zones", {
     ))
 })
 
+test_that("OSM provider fallbacks are used for validation and querying", {
+    region <- sf::st_sf(
+        id = 1,
+        geometry = sf::st_as_sfc(sf::st_bbox(c(
+            xmin = -74.5, ymin = 18.0, xmax = -71.6, ymax = 20.1
+        ), crs = 4326))
+    )
+    fallback_url <- "https://example.test/haiti-latest.osm.pbf"
+    validated_provider <- queried_provider <- NULL
+
+    local_mocked_bindings(
+        osm_extract_zone = function(match_info, provider) {
+            if (identical(provider, "openstreetmap_fr")) region else NULL
+        },
+        validate_osm_extract_coverage = function(region_sf, match_info, provider, ...) {
+            validated_provider <<- provider
+            TRUE
+        },
+        .package = "omniAPIr"
+    )
+    local_mocked_bindings(
+        oe_match = function(...) {
+            list(url = fallback_url, file_size = 1000)
+        },
+        oe_get = function(provider, ...) {
+            queried_provider <<- provider
+            sf::st_sf(
+                osm_id = "1",
+                amenity = "marketplace",
+                geometry = sf::st_sfc(sf::st_point(c(-72.3, 18.6)), crs = 4326)
+            )
+        },
+        .package = "osmextract"
+    )
+
+    result <- get_osm_features(
+        region_sf = region,
+        tag_sets = list(amenity = "marketplace"),
+        provider = "geofabrik",
+        match_place = "Haiti",
+        layers = "points"
+    )
+
+    expect_equal(validated_provider, "openstreetmap_fr")
+    expect_equal(queried_provider, "openstreetmap_fr")
+    expect_equal(nrow(result$pts), 1)
+})
+
 test_that("OSM multi-extract queries merge and deduplicate features", {
     region <- sf::st_sf(
         id = 1,
@@ -229,6 +277,9 @@ test_that("OSM multi-extract queries merge and deduplicate features", {
 
     queried_places <- character()
     local_mocked_bindings(
+        resolve_osm_match_providers = function(match_info, preferred_provider) {
+            rep(preferred_provider, length(match_info))
+        },
         validate_osm_extract_coverage = function(...) TRUE,
         .package = "omniAPIr"
     )

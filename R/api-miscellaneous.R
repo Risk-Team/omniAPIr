@@ -616,6 +616,34 @@ osm_extract_zone <- function(match_info, provider) {
 }
 
 
+resolve_osm_match_providers <- function(match_info, preferred_provider) {
+  match_infos <- if (!is.null(match_info$url)) list(match_info) else match_info
+  provider_names <- unique(c(
+    preferred_provider,
+    "geofabrik",
+    "bbbike",
+    "openstreetmap_fr",
+    "test"
+  ))
+
+  vapply(match_infos, function(info) {
+    matches <- provider_names[vapply(provider_names, function(candidate) {
+      !is.null(osm_extract_zone(info, candidate))
+    }, logical(1))]
+
+    if (length(matches) != 1L) {
+      stop(
+        "Could not identify a unique OSM provider catalogue for matched extract: ",
+        as.character(info$url),
+        call. = FALSE
+      )
+    }
+
+    matches[[1]]
+  }, character(1))
+}
+
+
 validate_osm_extract_coverage <- function(region_sf, match_info, provider,
                                           coverage_check = c("error", "warn", "none"),
                                           min_coverage = 0.98) {
@@ -630,7 +658,16 @@ validate_osm_extract_coverage <- function(region_sf, match_info, provider,
   }
 
   match_infos <- if (!is.null(match_info$url)) list(match_info) else match_info
-  extract_zones <- lapply(match_infos, osm_extract_zone, provider = provider)
+  if (length(provider) == 1L) {
+    provider <- rep(provider, length(match_infos))
+  }
+  if (length(provider) != length(match_infos)) {
+    stop(
+      "provider must have length one or match the number of OSM extracts.",
+      call. = FALSE
+    )
+  }
+  extract_zones <- Map(osm_extract_zone, match_infos, provider)
   if (length(extract_zones) == 0L || any(vapply(extract_zones, is.null, logical(1)))) {
     msg <- paste0(
       "Could not validate OSM extract coverage because one or more matched ",
@@ -1018,11 +1055,15 @@ get_osm_features <- function(
   keep_extract <- !duplicated(matched_urls)
   match_inputs <- match_inputs[keep_extract]
   match_infos <- match_infos[keep_extract]
+  matched_providers <- resolve_osm_match_providers(
+    match_info = match_infos,
+    preferred_provider = provider
+  )
 
   validate_osm_extract_coverage(
     region_sf = region_sf,
     match_info = match_infos,
-    provider = provider,
+    provider = matched_providers,
     coverage_check = coverage_check,
     min_coverage = min_coverage
   )
@@ -1035,8 +1076,9 @@ get_osm_features <- function(
   if (verbose) {
     for (i in seq_along(match_infos)) {
       message(sprintf(
-        "Matched provider file: %s (%.0f MB)",
+        "Matched provider file: %s [%s] (%.0f MB)",
         match_infos[[i]]$url,
+        matched_providers[[i]],
         sizes_mb[[i]]
       ))
     }
@@ -1103,7 +1145,7 @@ Refusing to download. Try:
         {
         result <- osmextract::oe_get(
           place = match_inputs[[i]],
-          provider = provider,
+          provider = matched_providers[[i]],
           layer = layer_name,
           query = sql_query, # SQL runs at st_read() stage
           extra_tags = extra_tags,
