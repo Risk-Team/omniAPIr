@@ -2042,8 +2042,11 @@ get_who_data <- function(indicators, iso3 = NULL, mrv = 10,
 #'   transient-error requests. Default is 3.
 #'
 #' @return A data.frame with one row per heritage item containing all fields
-#'   returned by the API. For WHC, the `coordinates` field is unpacked into
-#'   `latitude` and `longitude` columns. List-valued fields are collapsed to
+#'   returned by the API. For WHC, UNESCO's representative `geo_point_2d` is
+#'   exposed as numeric `latitude` and `longitude`; legacy flat `coordinates`
+#'   are accepted when no representative point field is available. Missing
+#'   locations remain NA. The raw `coordinates` geometry is removed without
+#'   expanding sites into component locations. List-valued fields are collapsed to
 #'   semicolon-separated strings. Returns `invisible(NULL)` if no records are
 #'   found.
 #'
@@ -2181,13 +2184,18 @@ get_unesco_data <- function(
   df <- dplyr::bind_rows(all_records)
 
   if (identical(dataset, "whc")) {
-    # Unpack coordinates list-column into flat lat/lon columns
-    if (!is.null(df$coordinates) && is.data.frame(df$coordinates)) {
-      df$latitude  <- df$coordinates$lat
-      df$longitude <- df$coordinates$lon
+    # UNESCO supplies a representative point separately from its GeoJSON
+    # MultiPoint geometry; do not choose or average component locations.
+    point <- df$geo_point_2d
+    if (!is.data.frame(point) || !all(c("lat", "lon") %in% names(point))) {
+      point <- df$coordinates
+    }
+    if (is.data.frame(point) && all(c("lat", "lon") %in% names(point))) {
+      df$latitude <- as.numeric(point$lat)
+      df$longitude <- as.numeric(point$lon)
     } else {
-      df$latitude  <- NA_real_
-      df$longitude <- NA_real_
+      df$latitude <- rep(NA_real_, nrow(df))
+      df$longitude <- rep(NA_real_, nrow(df))
     }
     df$coordinates <- NULL
 

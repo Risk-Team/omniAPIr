@@ -215,6 +215,14 @@ who_data <- get_who_data(
 )
 ```
 
+### UNESCO - Heritage locations
+
+`get_unesco_data(iso = "KE", dataset = "whc")` returns one row per heritage
+property. Its numeric `latitude` and `longitude` columns use UNESCO's supplied
+`geo_point_2d` representative point, including for multi-component properties.
+The client does not choose or average individual GeoJSON component locations.
+Missing locations remain `NA`; legacy flat coordinate fields are also supported.
+
 ### HDX HAPI - Humanitarian Data
 
 ```r

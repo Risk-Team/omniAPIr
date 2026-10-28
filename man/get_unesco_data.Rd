@@ -24,8 +24,11 @@ transient-error requests. Default is 3.}
 }
 \value{
 A data.frame with one row per heritage item containing all fields
-  returned by the API. For WHC, the `coordinates` field is unpacked into
-  `latitude` and `longitude` columns. List-valued fields are collapsed to
+  returned by the API. For WHC, UNESCO's representative `geo_point_2d` is
+  exposed as numeric `latitude` and `longitude`; legacy flat `coordinates`
+  are accepted when no representative point field is available. Missing
+  locations remain NA. The raw `coordinates` geometry is removed without
+  expanding sites into component locations. List-valued fields are collapsed to
   semicolon-separated strings. Returns `invisible(NULL)` if no records are
   found.
 }
