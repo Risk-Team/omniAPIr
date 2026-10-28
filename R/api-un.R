@@ -449,92 +449,82 @@ list_un_indicators <- function(
 }
 
 
-.fetch_who_indicators <- function(
-  search = NULL,
-  verbose = FALSE,
-  max_retries = 3
-) {
-  base_url <- "https://ghoapi.azureedge.net/api/Indicator"
-
-  if (verbose) {
-    message("Requesting WHO indicators: ", base_url)
-  }
-
-  fetch_with_retry <- function() {
-    last_err <- NULL
-    for (i in seq_len(max_retries)) {
-      if (verbose && max_retries > 1) {
-        message(sprintf("  Attempt %d/%d", i, max_retries))
-      }
-
-      out <- tryCatch(
-        {
-          resp <- httr2::request(base_url) |>
-            httr2::req_perform()
-          httr2::resp_check_status(resp)
-          httr2::resp_body_json(resp)
-        },
-        error = function(e) {
-          last_err <<- e
-          if (i < max_retries) {
-            Sys.sleep(2^i)
-          }
-          NULL
+.who_fetch_records <- function(entity, filter = NULL, context, verbose = FALSE,
+                               max_retries = 3, timeout_s = 30) {
+  page_size <- 10000L
+  offset <- 0L
+  pages <- list()
+  next_url <- NULL
+  repeat {
+    request <- if (is.null(next_url)) {
+      httr2::request(paste0("https://xmart-api-public.who.int/GHO/", entity)) |>
+        httr2::req_url_query(
+          `$filter` = filter, `$top` = page_size, `$skip` = offset,
+          `$orderby` = "Sys_PK"
+        )
+    } else {
+      httr2::request(next_url)
+    }
+    if (verbose) message("Requesting WHO ", context, ": ", request$url)
+    response <- NULL
+    for (attempt in seq_len(max_retries)) {
+      response <- tryCatch({
+        result <- request |>
+          httr2::req_timeout(timeout_s) |>
+          httr2::req_perform() |>
+          httr2::resp_body_json()
+        if (!is.list(result$value)) {
+          stop("WHO response is missing its value array.", call. = FALSE)
         }
-      )
-
-      if (!is.null(out)) return(out)
+        result
+      }, error = function(e) {
+        if (attempt == max_retries) {
+          stop(sprintf("Failed to fetch WHO %s after %d attempts: %s",
+                       context, max_retries, conditionMessage(e)), call. = FALSE)
+        }
+        if (verbose) message("  Request failed: ", conditionMessage(e))
+        Sys.sleep(2^attempt)
+        NULL
+      })
+      if (!is.null(response)) break
     }
-
-    stop(
-      sprintf(
-        "Failed to fetch WHO indicators after %d attempts: %s",
-        max_retries,
-        conditionMessage(last_err)
-      ),
-      call. = FALSE
-    )
+    if (is.null(response)) {
+      stop("Failed to fetch WHO ", context, call. = FALSE)
+    }
+    records <- response$value
+    if (length(records) > 0) {
+      pages[[length(pages) + 1L]] <- purrr::map_dfr(records, function(record) {
+        record[vapply(record, is.null, logical(1))] <- NA
+        tibble::as_tibble(record)
+      })
+    }
+    offset <- offset + length(records)
+    next_url <- response[["@odata.nextLink"]]
+    if (!is.null(next_url)) {
+      next_url <- httr2::url_modify_relative(request$url, next_url)
+    } else if (length(records) < page_size) {
+      break
+    }
   }
+  dplyr::bind_rows(pages)
+}
 
-  json <- fetch_with_retry()
-
-  if (is.null(json$value) || length(json$value) == 0) {
-    if (verbose) {
-      message("No indicator metadata returned by WHO.")
-    }
+.fetch_who_indicators <- function(search = NULL, verbose = FALSE, max_retries = 3) {
+  records <- .who_fetch_records("REF_INDICATOR", context = "indicators",
+                                verbose = verbose, max_retries = max_retries)
+  if (nrow(records) == 0) {
     return(tibble::tibble(code = character(), name = character()))
   }
-
-  # One row per indicator (handle potential NULLs gracefully)
-  df <- purrr::map_dfr(
-    json$value,
-    function(rec) {
-      rec_list <- as.list(rec)
-      # Only keep the fields we care about and replace NULL with NA
-      code <- rec_list$IndicatorCode %||% NA_character_
-      name <- rec_list$IndicatorName %||% NA_character_
-      tibble::tibble(code = code, name = name)
-    }
-  ) |>
+  result <- records |>
+    dplyr::transmute(code = INDICATOR_CODE, name = INDICATOR_NAME) |>
     dplyr::distinct()
-
-  # Apply search filter if provided
   if (!is.null(search) && nchar(search) > 0) {
     pattern <- paste0("(?i)", search)
-    df <- df |>
-      dplyr::filter(
-        grepl(pattern, code) | grepl(pattern, name)
-      )
+    result <- result |>
+      dplyr::filter(grepl(pattern, code) | grepl(pattern, name))
   }
-
-  if (verbose) {
-    message(sprintf(
-      "✓ WHO indicators retrieved: %s rows",
-      format(nrow(df), big.mark = ",")
-    ))
-  }
-
-  df
+  if (verbose) message("✓ WHO indicators retrieved: ", nrow(result), " rows")
+  result
 }
 
 
@@ -1969,202 +1959,68 @@ get_ilo_data <- function(
 }
 #' Get WHO Global Health Observatory data
 #'
-#' Simple wrapper around the WHO GHO API:
-#' - builds the URL(s)
-#' - fetches raw data
-#' - standardises isocode / Year / Value
-#' - keeps the most recent `mrv` years
-#' - optionally drops aggregates.
+#' Retrieves WHO GHO observations from the public xMart OData API. All native
+#' xMart fields are retained, including `INDICATOR_CODE`, `PERIOD_CODE`,
+#' `LOCATION_CODE`, `DIMENSION_1` and `DIMENSION_MEMBER_1` (through dimension 5),
+#' numeric values, uncertainty bounds and update dates. Dimension member codes
+#' are native values such as `BTSX`, not legacy codes such as `SEX_BTSX`.
+#' Requests are paginated and failures raise an error rather than returning
+#' incomplete observations. Only annual observations are returned.
 #'
 #' @param indicators Character vector of WHO GHO indicator codes (required).
-#' @param iso3 Optional ISO3 country code (e.g. "KEN") to filter on SpatialDim.
+#' @param iso3 Optional ISO3 country code (e.g. "KEN") to filter LOCATION_CODE.
 #'   If NULL (default), returns all entities.
-#' @param mrv Integer. Number of most recent years per country/indicator to keep.
-#'   Default is 10.
+#' @param mrv Integer. Number of most recent distinct years per country/indicator
+#'   to keep, retaining all disaggregations within those years. Default is 10.
+#'   NULL or a non-positive value keeps all years.
 #' @param exclude_aggregates Logical. If TRUE (default), drop regional/income
 #'   aggregates using `countrycode` on ISO3 codes.
 #' @param verbose Logical. If TRUE, prints URLs and a final row count.
-#' @param max_retries Integer. Maximum number of retry attempts for failed
-#'   requests. Default is 3.
+#' @param max_retries Integer. Maximum number of attempts per page. Default is 3.
 #' @param timeout_s Numeric. Per-request timeout in seconds. Default is 30.
 #'
-#' @return A tibble with all original WHO fields plus:
-#'   - `indicator`
-#'   - `isocode`
-#'   - `Year`
-#'   - `Value`
+#' @return A tibble with native xMart fields plus `indicator`, `isocode`,
+#'   integer `Year` and numeric `Value`. Legacy GHO field aliases are not added.
 #' @export
-get_who_data <- function(
-  indicators,
-  iso3 = NULL,
-  mrv = 10,
-  exclude_aggregates = TRUE,
-  verbose = FALSE,
-  max_retries = 3,
-  timeout_s = 30
-) {
+get_who_data <- function(indicators, iso3 = NULL, mrv = 10,
+                         exclude_aggregates = TRUE, verbose = FALSE,
+                         max_retries = 3, timeout_s = 30) {
   if (missing(indicators) || length(indicators) == 0) {
     stop("`indicators` must be a non-empty character vector.")
   }
-
-  indicators <- unique(indicators)
-
-  # ---- internal helper: fetch one indicator ---------------------------------
-  fetch_one_indicator <- function(ind) {
-    base_url <- sprintf("https://ghoapi.azureedge.net/api/%s", ind)
-
+  quote_odata <- function(value) paste0("'", gsub("'", "''", value, fixed = TRUE), "'")
+  out <- lapply(unique(indicators), function(indicator) {
+    filter <- paste0("INDICATOR_CODE eq ", quote_odata(indicator),
+                     " and PERIOD_TYPE eq 'YEAR'")
     if (!is.null(iso3)) {
-      # Filter only by SpatialDim (ISO3)
-      url <- sprintf(
-        "%s?$filter=SpatialDim%%20eq%%20'%s'",
-        base_url,
-        iso3
-      )
-    } else {
-      url <- base_url
+      filter <- paste0(filter, " and LOCATION_CODE eq ", quote_odata(iso3))
     }
-
-    if (verbose) {
-      message("Requesting: ", url)
-    }
-
-    # Retry logic with error handling
-    resp <- NULL
-    for (attempt in seq_len(max_retries)) {
-      resp <- tryCatch(
-        {
-          httr2::request(url) |>
-            httr2::req_timeout(timeout_s) |>
-            httr2::req_perform() |>
-            httr2::resp_body_json()
-        },
-        error = function(e) {
-          if (attempt < max_retries) {
-            wait_time <- 2^attempt
-            if (verbose) {
-              message(sprintf(
-                "  Request failed for %s (attempt %d/%d): %s. Retrying in %ds...",
-                ind,
-                attempt,
-                max_retries,
-                conditionMessage(e),
-                wait_time
-              ))
-            }
-            Sys.sleep(wait_time)
-            return(NULL)
-          }
-          stop(
-            sprintf(
-              "Failed to fetch WHO data for indicator %s after %d attempts: %s",
-              ind,
-              max_retries,
-              conditionMessage(e)
-            ),
-            call. = FALSE
-          )
-        }
-      )
-      if (!is.null(resp)) break
-    }
-
-    if (is.null(resp)) {
-      stop(
-        sprintf(
-          "Failed to fetch WHO data for indicator %s after %d attempts",
-          ind,
-          max_retries
-        ),
-        call. = FALSE
-      )
-    }
-
-    # WHO returns records under `$value`
-    if (is.null(resp$value) || length(resp$value) == 0) {
-      if (verbose) {
-        message("  (no rows returned)")
-      }
-      return(NULL)
-    }
-
-    # One row per record, replacing NULL fields with NA
-    df <- purrr::map_dfr(
-      resp$value,
-      function(rec) {
-        rec_list <- as.list(rec)
-        # Replace NULL elements with NA so tibble is happy
-        null_idx <- vapply(rec_list, is.null, logical(1))
-        rec_list[null_idx] <- NA
-        tibble::as_tibble(rec_list, .name_repair = "unique")
-      }
-    )
-
-    df$indicator <- ind
-    df
-  }
-
-  # ---- fetch all indicators and bind ----------------------------------------
-  out_list <- lapply(indicators, fetch_one_indicator)
-  out <- dplyr::bind_rows(out_list)
-
-  if (nrow(out) == 0) {
-    if (verbose) {
-      message("No data returned by WHO API for these parameters.")
-    }
-    return(out)
-  }
-
-  # ---- standardise key columns ----------------------------------------------
-  if (!"SpatialDim" %in% names(out)) {
-    out$SpatialDim <- NA_character_
-  }
-  if (!"TimeDim" %in% names(out)) {
-    out$TimeDim <- NA
-  }
-  if (!"NumericValue" %in% names(out)) {
-    out$NumericValue <- NA
-  }
-
+    .who_fetch_records("FACT", filter = filter,
+      context = paste("data for indicator", indicator), verbose = verbose,
+      max_retries = max_retries, timeout_s = timeout_s)
+  }) |>
+    dplyr::bind_rows()
+  if (nrow(out) == 0) return(out)
   out <- out |>
     dplyr::mutate(
-      isocode = SpatialDim,
-      Year = suppressWarnings(as.integer(TimeDim)),
-      Value = suppressWarnings(as.numeric(NumericValue))
+      indicator = INDICATOR_CODE,
+      isocode = LOCATION_CODE,
+      Year = suppressWarnings(as.integer(PERIOD_CODE)),
+      Value = suppressWarnings(as.numeric(VALUE_NUMERIC))
     )
-
-  # ---- keep most recent `mrv` years per country & indicator -----------------
   if (!is.null(mrv) && mrv > 0) {
     out <- out |>
       dplyr::group_by(isocode, indicator) |>
-      dplyr::arrange(dplyr::desc(Year), .by_group = TRUE) |>
-      dplyr::slice_head(n = mrv) |>
+      dplyr::filter(dplyr::dense_rank(dplyr::desc(Year)) <= mrv) |>
       dplyr::ungroup()
   }
-
-  # ---- drop aggregates if requested -----------------------------------------
-  if (exclude_aggregates && "isocode" %in% names(out)) {
+  if (exclude_aggregates) {
     out <- out |>
-      dplyr::mutate(
-        is_valid_country = !is.na(
-          countrycode::countrycode(
-            isocode,
-            origin = "iso3c",
-            destination = "country.name",
-            warn = FALSE
-          )
-        )
-      ) |>
-      dplyr::filter(is_valid_country) |>
-      dplyr::select(-is_valid_country)
+      dplyr::filter(!is.na(countrycode::countrycode(
+        isocode, origin = "iso3c", destination = "country.name", warn = FALSE
+      )))
   }
-
-  if (verbose) {
-    message(sprintf(
-      "✓ WHO data retrieved: %s rows",
-      format(nrow(out), big.mark = ",")
-    ))
-  }
-
+  if (verbose) message("✓ WHO data retrieved: ", nrow(out), " rows")
   out
 }
 

@@ -197,6 +197,15 @@ wheat_production <- get_faostat_data(
 
 ### WHO - Health Indicators
 
+WHO data and indicator discovery use the public xMart GHO API. Results retain
+the native fields (`LOCATION_CODE`, `PERIOD_CODE`, `DIMENSION_1`,
+`DIMENSION_MEMBER_1`, etc.) alongside `isocode`, `Year`, `Value`, and `indicator`.
+Dimension member codes are unprefixed: for example, both sexes is represented
+by `DIMENSION_1 == "SEX"` and `DIMENSION_MEMBER_1 == "BTSX"`.
+The former GHO fields such as `Dim1` and `SpatialDim` are no longer returned.
+`mrv` now retains distinct years and all their disaggregations; use `mrv = NULL`
+to retrieve the full annual history before selecting a population group.
+
 ```r
 # Get life expectancy data
 who_data <- get_who_data(

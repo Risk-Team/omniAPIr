@@ -17,34 +17,32 @@ get_who_data(
 \arguments{
 \item{indicators}{Character vector of WHO GHO indicator codes (required).}
 
-\item{iso3}{Optional ISO3 country code (e.g. "KEN") to filter on SpatialDim.
+\item{iso3}{Optional ISO3 country code (e.g. "KEN") to filter LOCATION_CODE.
 If NULL (default), returns all entities.}
 
-\item{mrv}{Integer. Number of most recent years per country/indicator to keep.
-Default is 10.}
+\item{mrv}{Integer. Number of most recent distinct years per country/indicator
+to keep, retaining all disaggregations within those years. Default is 10.
+NULL or a non-positive value keeps all years.}
 
 \item{exclude_aggregates}{Logical. If TRUE (default), drop regional/income
 aggregates using `countrycode` on ISO3 codes.}
 
 \item{verbose}{Logical. If TRUE, prints URLs and a final row count.}
 
-\item{max_retries}{Integer. Maximum number of retry attempts for failed
-requests. Default is 3.}
+\item{max_retries}{Integer. Maximum number of attempts per page. Default is 3.}
 
 \item{timeout_s}{Numeric. Per-request timeout in seconds. Default is 30.}
 }
 \value{
-A tibble with all original WHO fields plus:
-  - `indicator`
-  - `isocode`
-  - `Year`
-  - `Value`
+A tibble with native xMart fields plus `indicator`, `isocode`,
+  integer `Year` and numeric `Value`. Legacy GHO field aliases are not added.
 }
 \description{
-Simple wrapper around the WHO GHO API:
-- builds the URL(s)
-- fetches raw data
-- standardises isocode / Year / Value
-- keeps the most recent `mrv` years
-- optionally drops aggregates.
+Retrieves WHO GHO observations from the public xMart OData API. All native
+xMart fields are retained, including `INDICATOR_CODE`, `PERIOD_CODE`,
+`LOCATION_CODE`, `DIMENSION_1` and `DIMENSION_MEMBER_1` (through dimension 5),
+numeric values, uncertainty bounds and update dates. Dimension member codes
+are native values such as `BTSX`, not legacy codes such as `SEX_BTSX`.
+Requests are paginated and failures raise an error rather than returning
+incomplete observations. Only annual observations are returned.
 }
