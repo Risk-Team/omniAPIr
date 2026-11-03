@@ -538,6 +538,14 @@ get_invasive_alien_species <- function(
   }
 
   candidates <- .country_name_candidates(country_name)
+  # GRIIS uses the formal country name rather than countrycode's Congo - Kinshasa.
+  if (toupper(iso3) == "COD") {
+    candidates <- c(
+      candidates,
+      "Democratic Republic of Congo",
+      "Democratic Republic of the Congo"
+    )
+  }
   title_norm <- .normalize_country_key(griis_rows$title)
   cand_norm <- unique(.normalize_country_key(candidates))
   pattern <- paste(cand_norm, collapse = "|")

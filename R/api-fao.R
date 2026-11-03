@@ -1502,6 +1502,8 @@ get_fao_fra_data <- function(
     )
   }
 
+  # EMPRES filters require its country label rather than Congo - Kinshasa.
+  countries[iso3 == "COD"] <- "Democratic Republic of the Congo"
   unname(countries)
 }
 
