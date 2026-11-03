@@ -53,7 +53,7 @@ ISO code, and date range.
 \details{
 API Documentation: \url{https://apidocs.acleddata.com/}
 
-The function automatically handles pagination (5000 rows per page) and retrieves
+The function automatically handles cursor pagination (5000 rows per request) and retrieves
 all available data matching the filters. By default it tries OAuth password
 grant first, then falls back to ACLED's documented cookie-auth flow when the
 endpoint rejects an otherwise valid OAuth token with the known permission error.

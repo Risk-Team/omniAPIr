@@ -29,7 +29,7 @@
 #' @details
 #' API Documentation: \url{https://apidocs.acleddata.com/}
 #'
-#' The function automatically handles pagination (5000 rows per page) and retrieves
+#' The function automatically handles cursor pagination (5000 rows per request) and retrieves
 #' all available data matching the filters. By default it tries OAuth password
 #' grant first, then falls back to ACLED's documented cookie-auth flow when the
 #' endpoint rejects an otherwise valid OAuth token with the known permission error.
@@ -203,10 +203,11 @@ get_acled_data <- function(
   params$limit <- page_limit
   all_data <- list()
   page <- 1
+  cursor <- NULL
   total_fetched <- 0
 
   repeat {
-    params$page <- page
+    params$cursor <- cursor
 
     if (verbose) {
       message(sprintf(
@@ -360,17 +361,14 @@ get_acled_data <- function(
       ))
     }
 
-    if (rows_fetched < page_limit) {
-      if (verbose) {
-        message(sprintf(
-          "Received %d rows (less than limit %d). All data retrieved.",
-          rows_fetched,
-          page_limit
-        ))
-      }
+    next_cursor <- out$next_cursor
+    if (is.null(next_cursor)) {
       break
     }
-
+    if (identical(as.character(next_cursor), as.character(cursor))) {
+      stop("ACLED returned a repeated pagination cursor.", call. = FALSE)
+    }
+    cursor <- next_cursor
     page <- page + 1
   }
 
