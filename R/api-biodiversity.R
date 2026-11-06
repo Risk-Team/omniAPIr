@@ -538,6 +538,9 @@ get_invasive_alien_species <- function(
   }
 
   candidates <- .country_name_candidates(country_name)
+  if (toupper(iso3) == "MMR") {
+    candidates <- c(candidates, "Myanmar")
+  }
   # GRIIS uses the formal country name rather than countrycode's Congo - Kinshasa.
   if (toupper(iso3) == "COD") {
     candidates <- c(
