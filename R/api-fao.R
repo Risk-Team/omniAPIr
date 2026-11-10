@@ -1486,11 +1486,20 @@ get_fao_fra_data <- function(
   }
 
   iso3 <- toupper(as.character(country_iso3))
-  countries <- countrycode::countrycode(
-    iso3,
-    origin = "iso3c",
-    destination = "country.name.en",
-    warn = FALSE
+  # Non-UN territories (e.g. TWN, PRI) have no UN name; use the English name.
+  countries <- dplyr::coalesce(
+    countrycode::countrycode(
+      iso3,
+      origin = "iso3c",
+      destination = "un.name.en",
+      warn = FALSE
+    ),
+    countrycode::countrycode(
+      iso3,
+      origin = "iso3c",
+      destination = "country.name.en",
+      warn = FALSE
+    )
   )
 
   missing <- iso3[is.na(countries)]
@@ -1502,10 +1511,9 @@ get_fao_fra_data <- function(
     )
   }
 
-  # EMPRES filters require its country label rather than Congo - Kinshasa.
-  countries[iso3 == "COD"] <- "Democratic Republic of the Congo"
-  countries[iso3 == "MMR"] <- "Myanmar"
-  unname(countries)
+  # EMPRES labels areas with UN names but a straight apostrophe
+  # (Lao People's Democratic Republic, Côte d'Ivoire).
+  unname(gsub("\u2019", "'", countries, fixed = TRUE))
 }
 
 .empres_valid_diseases <- function() {
