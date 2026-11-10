@@ -459,6 +459,20 @@ add_osm_feature_metadata <- function(x, feature_class, feature_label) {
 }
 
 
+# The multipolygons layer stores way-based areas under osm_way_id with a NULL
+# osm_id, so de-duplicating on osm_id alone collapses them into one feature.
+dedupe_osm_features <- function(x) {
+  if (!"osm_id" %in% names(x)) {
+    return(x)
+  }
+  key <- as.character(x$osm_id)
+  if ("osm_way_id" %in% names(x)) {
+    way_key <- ifelse(is.na(x$osm_way_id), NA_character_, paste0("way/", x$osm_way_id))
+    key <- dplyr::coalesce(key, way_key)
+  }
+  x[is.na(key) | !duplicated(key), , drop = FALSE]
+}
+
 filter_osm_sf_by_tags <- function(x, tag_set, feature_class, feature_label) {
   if (!inherits(x, "sf") || nrow(x) == 0) {
     return(empty_osm_sf(x, feature_class, feature_label))
@@ -1193,11 +1207,7 @@ Refusing to download. Try:
     combined <- if (length(successful) == 0L) {
       empty_osm_sf()
     } else {
-      result <- dplyr::bind_rows(successful)
-      if ("osm_id" %in% names(result)) {
-        result <- result[!duplicated(as.character(result$osm_id)), , drop = FALSE]
-      }
-      result
+      dedupe_osm_features(dplyr::bind_rows(successful))
     }
     errors <- Filter(Negate(is.null), lapply(extract_results, `[[`, "error"))
 
