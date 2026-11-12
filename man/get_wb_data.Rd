@@ -11,7 +11,7 @@ get_wb_data(
   verbose = FALSE,
   conda_env,
   exclude_aggregates = TRUE,
-  max_retries = 3,
+  max_retries = 6,
   database = 2
 )
 }
@@ -29,7 +29,7 @@ get_wb_data(
 \item{exclude_aggregates}{Logical. If TRUE (default), filters out regional and income group aggregates,
 returning only data for individual countries with valid ISO3 codes.}
 
-\item{max_retries}{Integer. Maximum number of retry attempts for failed requests. Default is 3.}
+\item{max_retries}{Integer. Maximum number of retry attempts for failed requests. Default is 6 (waits of 2, 4, 8, 16, and 32 seconds between attempts).}
 
 \item{database}{Integer. World Bank database ID. Default is 2 (WDI). Use 88 for Food & Price Database.}
 }

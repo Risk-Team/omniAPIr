@@ -717,7 +717,7 @@ list_un_indicators <- function(
 #' @param conda_env Character. Conda environment name containing wbgapi package (required).
 #' @param exclude_aggregates Logical. If TRUE (default), filters out regional and income group aggregates,
 #'   returning only data for individual countries with valid ISO3 codes.
-#' @param max_retries Integer. Maximum number of retry attempts for failed requests. Default is 3.
+#' @param max_retries Integer. Maximum number of retry attempts for failed requests. Default is 6 (waits of 2, 4, 8, 16, and 32 seconds between attempts).
 #' @param database Integer. World Bank database ID. Default is 2 (WDI). Use 88 for Food & Price Database.
 #'
 #' @return A data.frame with columns: isocode, Year, value, indicator.
@@ -780,7 +780,7 @@ get_wb_data <- function(
   verbose = FALSE,
   conda_env,
   exclude_aggregates = TRUE,
-  max_retries = 3,
+  max_retries = 6,
   database = 2
 ) {
   # Validate conda_env parameter
